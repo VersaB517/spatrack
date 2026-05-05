@@ -1,0 +1,11 @@
+{
+  "name": "spatrack",
+  "version": "1.0.0",
+  "description": "SPAtrack - Special Pricing Agreement Manager",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
