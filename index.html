@@ -305,13 +305,17 @@ Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=number, qty=number. 
     const resp=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":S.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-opus-4-5",max_tokens:4096,messages:[{role:"user",content:messageContent}]})
+      body:JSON.stringify({model:"claude-opus-4-5",max_tokens:16000,messages:[{role:"user",content:messageContent}]})
     });
     if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||"API error "+resp.status);}
     const data=await resp.json();
     const raw=data.content.map(c=>c.text||"").join("").trim().replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
     const ex=JSON.parse(raw);
-    S.imp.review={vendor:ex.vendor||"",endUser:ex.endUser||"",spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,qty:parseInt(i.qty)||1})),_ni:blankItem()};
+    // Try to match extracted endUser to existing accounts, otherwise leave blank for manual selection
+    const extractedEU = ex.endUser||"";
+    const allEUNames = Object.keys(S.margins);
+    const matchedEU = allEUNames.find(n=>n.toLowerCase()===extractedEU.toLowerCase()) || "";
+    S.imp.review={vendor:ex.vendor||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,qty:parseInt(i.qty)||1})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
     S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
@@ -382,7 +386,12 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
   tr.appendChild(h("div",{class:"syne",style:{fontSize:"16px",fontWeight:"700",flex:"1"}},isEdit?"Edit SPA":aiMode?"Review Extracted SPA":"Add New SPA"));
   box.appendChild(tr);
 
-  if(aiMode) box.appendChild(h("div",{style:{background:"rgba(91,33,182,.1)",border:"1px solid rgba(91,33,182,.25)",borderRadius:"6px",padding:"9px 13px",marginBottom:"14px",fontSize:"11px",color:"#c4b5fd"}},"Purple fields were filled by AI. Review all fields before saving."));
+  if(aiMode){
+    box.appendChild(h("div",{style:{background:"rgba(91,33,182,.1)",border:"1px solid rgba(91,33,182,.25)",borderRadius:"6px",padding:"9px 13px",marginBottom:"14px",fontSize:"11px",color:"#c4b5fd"}},"Purple fields were filled by AI. Review all fields before saving."));
+    if(spa._extractedEU&&!spa.endUser){
+      box.appendChild(h("div",{style:{background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",borderRadius:"6px",padding:"9px 13px",marginBottom:"10px",fontSize:"11px",color:"#fbbf24"}},"⚠ AI detected end user: ""+spa._extractedEU+"". Please select the matching account from the dropdown below."));
+    }
+  }
 
   const grid=h("div",{class:"g2 mb10"});
   [["Vendor","vendor","text","e.g. Belden"],["SPA Number","spaNumber","text","e.g. BLD-2026-0001"],["Category","category","text","e.g. Cabling"],["Discount %","discount","number","e.g. 28"],["Expiration Date","expiration","date",""]].forEach(([lb,field,type,ph])=>{
@@ -949,8 +958,19 @@ function render(){
   const sw=h("div",{class:"search-wrap"});
   sw.appendChild(h("svg",{width:"14",height:"14",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor","stroke-width":"2",html:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>'}));
   const si=h("input",{class:"search-inp",type:"text",placeholder:"Search by part number or description...",value:S.searchQ});
-  si.addEventListener("input",e=>set({searchQ:e.target.value}));
-  si.addEventListener("keydown",e=>{if(e.key==="Escape"){set({searchQ:""});}});
+  si.addEventListener("input",e=>{
+    S.searchQ=e.target.value;
+    const mainEl=document.getElementById("main");
+    if(mainEl){
+      const aEUs=buildEUs(S.spas,S.margins);
+      mainEl.innerHTML="";
+      if(S.searchQ.trim()) mainEl.appendChild(renderSearch());
+      else if(S.view==="dashboard") mainEl.appendChild(renderDashboard(aEUs));
+      else if(S.view==="spas")      mainEl.appendChild(renderSPAs(aEUs));
+      else if(S.view==="contract")  mainEl.appendChild(renderContract(aEUs));
+    }
+  });
+  si.addEventListener("keydown",e=>{if(e.key==="Escape"){S.searchQ="";render();}});
   sw.appendChild(si);
   if(S.searchQ){
     const clr=h("button",{class:"search-clear",onclick:()=>set({searchQ:""})},"✕");
