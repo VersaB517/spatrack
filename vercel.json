@@ -1,12 +1,7 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "index.html", "use": "@vercel/static" },
-    { "src": "api/*.js", "use": "@vercel/node" }
-  ],
   "routes": [
-    { "src": "/api/spas(.*)", "dest": "/api/spas.js" },
-    { "src": "/api/margins(.*)", "dest": "/api/margins.js" },
+    { "src": "/api/spas", "dest": "/api/spas.js" },
+    { "src": "/api/margins", "dest": "/api/margins.js" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
