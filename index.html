@@ -389,7 +389,7 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
   if(aiMode){
     box.appendChild(h("div",{style:{background:"rgba(91,33,182,.1)",border:"1px solid rgba(91,33,182,.25)",borderRadius:"6px",padding:"9px 13px",marginBottom:"14px",fontSize:"11px",color:"#c4b5fd"}},"Purple fields were filled by AI. Review all fields before saving."));
     if(spa._extractedEU&&!spa.endUser){
-      box.appendChild(h("div",{style:{background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",borderRadius:"6px",padding:"9px 13px",marginBottom:"10px",fontSize:"11px",color:"#fbbf24"}},"⚠ AI detected end user: ""+spa._extractedEU+"". Please select the matching account from the dropdown below."));
+      box.appendChild(h("div",{style:{background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",borderRadius:"6px",padding:"9px 13px",marginBottom:"10px",fontSize:"11px",color:"#fbbf24"}},"⚠ AI detected: "+spa._extractedEU+" — please select the matching account below."));
     }
   }
 
