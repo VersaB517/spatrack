@@ -1,9 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,14 +13,14 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
     if (req.method === 'POST') {
-      const { vendor, end_user, spa_number, discount, expiration, category, items } = req.body;
-      const { data, error } = await supabase.from('spas').insert([{ vendor, end_user, spa_number, discount, expiration, category, items }]).select();
+      const { vendor, end_user, spa_number, discount, expiration, category, items, renewal_status } = req.body;
+      const { data, error } = await supabase.from('spas').insert([{ vendor, end_user, spa_number, discount, expiration, category, items, renewal_status: renewal_status||null }]).select();
       if (error) throw error;
       return res.status(201).json(data[0]);
     }
     if (req.method === 'PUT') {
-      const { id, vendor, end_user, spa_number, discount, expiration, category, items } = req.body;
-      const { data, error } = await supabase.from('spas').update({ vendor, end_user, spa_number, discount, expiration, category, items }).eq('id', id).select();
+      const { id, vendor, end_user, spa_number, discount, expiration, category, items, renewal_status } = req.body;
+      const { data, error } = await supabase.from('spas').update({ vendor, end_user, spa_number, discount, expiration, category, items, renewal_status: renewal_status||null }).eq('id', id).select();
       if (error) throw error;
       return res.status(200).json(data[0]);
     }
