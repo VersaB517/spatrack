@@ -17,17 +17,17 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'IBM Plex Mon
 .logo{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:#4f8ef7;letter-spacing:-.02em;cursor:default;}
 .logo span{color:#2a3a52;}
 .nav-divider{width:1px;height:20px;background:#131b28;}
-.navitem{padding:5px 11px;border-radius:5px;cursor:pointer;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#4a5568;transition:all .15s;font-family:'IBM Plex Mono',monospace;}
-.navitem:hover{background:rgba(79,142,247,.08);color:#8ba9d4;}
-.navitem.active{color:#4f8ef7;background:rgba(79,142,247,.1);}
+.navitem{padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#64748b;transition:all .15s;font-family:'IBM Plex Mono',monospace;font-weight:600;border:1px solid transparent;}
+.navitem:hover{background:rgba(79,142,247,.1);color:#8ba9d4;border-color:#1e2d42;}
+.navitem.active{color:#4f8ef7;background:rgba(79,142,247,.15);border-color:rgba(79,142,247,.4);}
 .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
 .alert-pill{background:#2d0a0a;border:1px solid #5c1a1a;border-radius:20px;padding:3px 10px;font-size:10px;color:#f87171;letter-spacing:.06em;animation:pu 2s ease-in-out infinite;}
 @keyframes pu{0%,100%{opacity:1;}50%{opacity:.4;}}
 
 /* EU TABS */
 #eutabs{display:flex;align-items:center;gap:5px;padding:7px 24px;border-bottom:1px solid #131b28;background:#05070d;flex-shrink:0;overflow-x:auto;}
-.eu-label{font-size:9px;color:#2a3a52;letter-spacing:.12em;text-transform:uppercase;margin-right:6px;white-space:nowrap;}
-.eutab{padding:4px 11px;border-radius:20px;cursor:pointer;font-size:10px;border:1px solid transparent;white-space:nowrap;color:#4a5568;transition:all .15s;font-family:'IBM Plex Mono',monospace;}
+.eu-label{font-size:10px;color:#2a3a52;letter-spacing:.1em;text-transform:uppercase;margin-right:8px;white-space:nowrap;font-weight:600;}
+.eutab{padding:5px 13px;border-radius:20px;cursor:pointer;font-size:12px;border:1px solid transparent;white-space:nowrap;color:#64748b;transition:all .15s;font-family:'IBM Plex Mono',monospace;font-weight:500;}
 .eutab:hover{color:#8ba9d4;}
 .eutab.active{background:rgba(79,142,247,.1);color:#4f8ef7;border-color:rgba(79,142,247,.3);}
 .eutab-add{border-style:dashed;border-color:#1e2a38;color:#2a3a52;}
@@ -148,7 +148,7 @@ async function apiDel(p)      { const r=await fetch(p,{method:"DELETE"}); if(!r.
 
 async function loadAll() {
   const [raw, margins] = await Promise.all([apiGet("/api/spas"), apiGet("/api/margins")]);
-  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],status:calcStatus(r.expiration)}));
+  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
   return {spas,margins};
 }
 
@@ -157,7 +157,7 @@ async function loadAll() {
 // ═══════════════════════════════════════════
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function daysUntil(d)    { return Math.ceil((new Date(d)-TODAY)/86400000); }
-function calcStatus(d)   { const n=daysUntil(d); return n<0?"expired":n<=EXPIRING_DAYS?"expiring":"active"; }
+function calcStatus(d,cur)   { if(cur==="renewal"||cur==="submitted") return cur; const n=daysUntil(d); return n<0?"expired":n<=EXPIRING_DAYS?"expiring":"active"; }
 function fmtDate(d)      { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
 function fmtMoney(v)     { return "$"+Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function euCol(n,a)      { const e=a.find(x=>x.name===n); return e?e.color:"#4a5568"; }
@@ -166,14 +166,16 @@ function buildEUs(spas,margins) {
   return names.map((name,i)=>({name,color:EU_COLORS[i%EU_COLORS.length]}));
 }
 function blankSPA()  { return {vendor:"",endUser:"",spaNumber:"",discount:"",expiration:"",category:"",items:[],_ni:blankItem()}; }
-function blankItem() { return {partNumber:"",description:"",listPrice:"",qty:""}; }
-function loadKey()   { try{return localStorage.getItem(APIKEY_KEY)||"";}catch(e){return "";} }
+function blankItem() { return {partNumber:"",description:"",listPrice:"",qty:"",uom:"EA"}; }
+function loadKey()   { try{return window.__ANTHROPIC_KEY||localStorage.getItem(APIKEY_KEY)||""; }catch(e){return "";} }
 function saveKey(k)  { try{localStorage.setItem(APIKEY_KEY,k);}catch(e){} }
 
 const ST = {
   active:   {color:"#4ade80",bg:"#052010",label:"Active"},
   expiring: {color:"#fbbf24",bg:"#1c1200",label:"Expiring Soon"},
   expired:  {color:"#f87171",bg:"#1a0505",label:"Expired"},
+  renewal:  {color:"#818cf8",bg:"#0f0a2a",label:"Renewal In Progress"},
+  submitted:{color:"#22d3ee",bg:"#061a1f",label:"Renewal Submitted"},
 };
 
 // ═══════════════════════════════════════════
@@ -184,8 +186,8 @@ let S = {
   view:"dashboard", activeEU:"all", selSPA:null,
   filterSt:"all", sortBy:"expiration",
   searchQ:"",
-  showAdd:false, showEdit:false, showAddEU:false, showClear:false, showApiKey:false, showImport:false,
-  newEU:"", editSPA:null, newSPA:blankSPA(),
+  showAdd:false, showEdit:false, showAddEU:false, showEditEU:false, showDeleteEU:false, showClear:false, showApiKey:false, showImport:false,
+  newEU:"", editEUName:"", editEUOld:"", deleteEUName:"", editSPA:null, newSPA:blankSPA(),
   apiKey:loadKey(),
   imp:{step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null},
   toast:null,
@@ -237,6 +239,43 @@ async function doUpdateMargin(eu,m) {
   catch(e){toast("Margin save failed","err");}
 }
 
+async function doRenameEU() {
+  const oldName=S.editEUOld.trim(), newName=S.editEUName.trim();
+  if(!newName||oldName===newName){set({showEditEU:false});return;}
+  try{
+    // Update all SPAs with old endUser name
+    const toUpdate=S.spas.filter(s=>s.endUser===oldName);
+    await Promise.all(toUpdate.map(spa=>apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:newName,spa_number:spa.spaNumber,discount:spa.discount,expiration:spa.expiration,category:spa.category,items:spa.items})));
+    // Upsert new margin, delete old
+    const oldMargin=S.margins[oldName]??15;
+    await apiPost("/api/margins",{end_user:newName,margin:oldMargin});
+    await apiDel("/api/margins?end_user="+encodeURIComponent(oldName));
+    // Update local state
+    S.spas=S.spas.map(s=>s.endUser===oldName?{...s,endUser:newName}:s);
+    S.margins[newName]=oldMargin; delete S.margins[oldName];
+    if(S.activeEU===oldName) S.activeEU=newName;
+    S.showEditEU=false; S.editEUName=""; S.editEUOld="";
+    toast("Account renamed ✓");
+  }catch(e){toast("Rename failed: "+e.message,"err");}
+}
+
+async function doDeleteEU() {
+  const name=S.deleteEUName;
+  if(!name)return;
+  try{
+    // Delete all SPAs for this account
+    const toDelete=S.spas.filter(s=>s.endUser===name);
+    await Promise.all(toDelete.map(spa=>apiDel("/api/spas?id="+spa.id)));
+    // Delete margin
+    await apiDel("/api/margins?end_user="+encodeURIComponent(name));
+    S.spas=S.spas.filter(s=>s.endUser!==name);
+    delete S.margins[name];
+    if(S.activeEU===name) S.activeEU="all";
+    S.showDeleteEU=false; S.deleteEUName="";
+    toast("Account deleted ✓");
+  }catch(e){toast("Delete failed: "+e.message,"err");}
+}
+
 // ═══════════════════════════════════════════
 //  FILE IMPORT + AI EXTRACTION
 // ═══════════════════════════════════════════
@@ -281,9 +320,9 @@ async function doExtract() {
   "discount": 25.5,
   "expiration": "YYYY-MM-DD",
   "category": "Cabling|Fiber|Enclosures|Racks|Connectivity|Infrastructure|Other",
-  "items": [{"partNumber":"","description":"","listPrice":0.00,"qty":1}]
+  "items": [{"partNumber":"","description":"","listPrice":0.00,"qty":1,"uom":"EA"}]
 }
-Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=number, qty=number. Use "" or 0 for missing. items=[] if none found.`;
+Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=per-unit price (NOT total), qty=quantity, uom=unit of measure (EA/FT/MF/PK/BOX/ROLL/PR/CTN). Use "" or 0 for missing. items=[] if none found. IMPORTANT: listPrice must be the price per single unit, not the extended/total price.`;
 
   try {
     let messageContent;
@@ -315,7 +354,7 @@ Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=number, qty=number. 
     const extractedEU = ex.endUser||"";
     const allEUNames = Object.keys(S.margins);
     const matchedEU = allEUNames.find(n=>n.toLowerCase()===extractedEU.toLowerCase()) || "";
-    S.imp.review={vendor:ex.vendor||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,qty:parseInt(i.qty)||1})),_ni:blankItem(),_extractedEU:extractedEU};
+    S.imp.review={vendor:ex.vendor||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
     S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
@@ -343,7 +382,7 @@ function getSummary(src){
   let tL=0,tS=0,tC=0;
   src.filter(s=>s.status!=="expired").forEach(spa=>{
     const m=S.margins[spa.endUser]??15;
-    spa.items.forEach(it=>{const l=it.listPrice*it.qty,c=l*(1-spa.discount/100);tL+=l;tS+=c;tC+=c*(1+m/100);});
+    spa.items.forEach(it=>{const l=it.listPrice*it.qty,c=it.listPrice*(1-spa.discount/100)*it.qty;tL+=l;tS+=c;tC+=c*(1+m/100);});
   });
   return{tList:tL,tSPA:tS,tContract:tC,tGP:tC-tS};
 }
@@ -402,6 +441,9 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
   if(aiMode&&spa.endUser) euSel.className="inp ai-filled";
   grid.appendChild(labeled("End User Account",euSel));
   box.appendChild(grid);
+  // Renewal status selector
+  const rsSel=mkSel([["","Active (no renewal action)"],["renewal","Renewal In Progress"],["submitted","Renewal Submitted"]],spa.renewalStatus||"",v=>spa.renewalStatus=v);
+  box.appendChild(h("div",{class:"flex-col gap4 mb10"},h("div",{class:"stat-label mb4"},"Renewal Status"),rsSel));
 
   box.appendChild(h("div",{class:"stat-label mt4 mb8"},aiMode?"Line Items (verify part numbers & prices)":"Line Items"));
   const liWrap=h("div",{class:"flex-col gap6 mb8"});
@@ -414,7 +456,7 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
       lt.appendChild(tx(item.description,{color:"#4a5568",display:"block",marginTop:"2px",fontSize:"11px"}));
       r.appendChild(lt);
       const rr=h("div",{class:"flex gap8",style:{alignItems:"center",flexShrink:"0"}});
-      rr.appendChild(tx("×"+item.qty+" @ "+fmtMoney(item.listPrice),{color:"#4a5568",fontSize:"11px"}));
+      rr.appendChild(tx(fmtMoney(item.listPrice)+"/"+( item.uom||"EA")+" × "+item.qty,{color:"#4a5568",fontSize:"11px"}));
       const rb=btn("✕","btn btn-ghost btn-sm",()=>{spa.items=spa.items.filter((_,i)=>i!==idx);refreshLi();});
       rr.appendChild(rb);r.appendChild(rr);liWrap.appendChild(r);
     });
@@ -422,14 +464,16 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
   refreshLi();box.appendChild(liWrap);
 
   const ni=spa._ni||blankItem();
-  const niGrid=h("div",{class:"g4 mb10"});
-  [["Part #","partNumber","text"],["Description","description","text"],["List $","listPrice","number"],["Qty","qty","number"]].forEach(([ph,f,t])=>{
+  const niGrid=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 80px 60px 70px",gap:"6px",marginBottom:"10px"}});
+  [["Part #","partNumber","text"],["Description","description","text"],["List $/unit","listPrice","number"],["Qty","qty","number"]].forEach(([ph,f,t])=>{
     niGrid.appendChild(mkInp({type:t,placeholder:ph},ni[f],v=>ni[f]=v));
   });
+  const uomSel=mkSel([["EA","EA - Each"],["FT","FT - Foot"],["MF","MF - 1000 Ft"],["PK","PK - Pack"],["BOX","BOX"],["ROLL","Roll"],["PR","PR - Pair"],["CTN","CTN - Carton"]],ni.uom||"EA",v=>ni.uom=v);
+  niGrid.appendChild(uomSel);
   box.appendChild(niGrid);
   box.appendChild(btn("+ Add Line Item","btn btn-muted w100 mb14",()=>{
     if(!ni.partNumber||!ni.description)return;
-    spa.items=[...spa.items,{partNumber:ni.partNumber,description:ni.description,listPrice:parseFloat(ni.listPrice)||0,qty:parseInt(ni.qty)||1}];
+    spa.items=[...spa.items,{partNumber:ni.partNumber,description:ni.description,listPrice:parseFloat(ni.listPrice)||0,qty:parseInt(ni.qty)||1,uom:ni.uom||"EA"}];
     ni.partNumber="";ni.description="";ni.listPrice="";ni.qty="";refreshLi();
   }));
 
@@ -743,7 +787,7 @@ function renderSPAs(allEUs){
     dc.appendChild(tx(fmtDate(spa.expiration),{fontSize:"10px",display:"block"}));
     dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days+"d left",{fontSize:"9px",color:days<0?"#f87171":days<=EXPIRING_DAYS?"#fbbf24":"#4a5568",display:"block",marginTop:"1px"}));
     row.appendChild(dc);
-    row.appendChild(h("div",{},badge(s.label,s.color,s.bg)));
+    row.appendChild(h("div",{},badge(spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].label:s.label,spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].color:s.color,spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].bg:s.bg)));
     const db=btn("✕","btn btn-ghost btn-sm",e=>{e.stopPropagation();doDelete(spa.id);});
     row.appendChild(h("div",{style:{textAlign:"right"}},db));
     tw.appendChild(row);
@@ -753,7 +797,7 @@ function renderSPAs(allEUs){
   if(S.selSPA){
     const spa=S.selSPA,m=S.margins[spa.endUser]??15;
     const lt=spa.items.reduce((s,i)=>s+i.listPrice*i.qty,0);
-    const sc=lt*(1-spa.discount/100),ct=sc*(1+m/100);
+    const sc=spa.items.reduce((s,i)=>s+i.listPrice*(1-spa.discount/100)*i.qty,0),ct=sc*(1+m/100);
     const color=euCol(spa.endUser,allEUs),st=ST[spa.status];
     const panel=h("div",{class:"card fadein sticky-top",style:{padding:"16px",height:"fit-content"}});
     const ph=h("div",{class:"flex mb10",style:{justifyContent:"space-between",alignItems:"start"}});
@@ -776,15 +820,17 @@ function renderSPAs(allEUs){
     panel.appendChild(meta);
     panel.appendChild(h("div",{class:"stat-label mb6"},"Line Items"));
     spa.items.forEach(item=>{
-      const list=item.listPrice*item.qty,cost=list*(1-spa.discount/100);
+      const uom=item.uom||"EA";
+      const spaUnit=item.listPrice*(1-spa.discount/100);
+      const totalSPA=spaUnit*item.qty;
       const ic=h("div",{class:"subcard mb5",style:{padding:"8px 10px"}});
       ic.appendChild(tx(item.partNumber,{fontSize:"10px",color:"#8ba9d4",fontWeight:"600",display:"block"}));
       ic.appendChild(tx(item.description,{fontSize:"10px",color:"#4a5568",display:"block",marginTop:"1px",marginBottom:"5px"}));
       const pr=h("div",{class:"flex gap8",style:{fontSize:"10px",flexWrap:"wrap"}});
-      pr.appendChild(tx("List: "+fmtMoney(item.listPrice),{color:"#4a5568"}));
-      pr.appendChild(tx("×"+item.qty,{color:"#4a5568"}));
-      pr.appendChild(tx("SPA: "+fmtMoney(cost),{color:"#4ade80"}));
-      pr.appendChild(tx("Sell: "+fmtMoney(cost*(1+m/100)),{color}));
+      pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+uom,{color:"#4a5568"}));
+      pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#4a5568"}));
+      pr.appendChild(tx("SPA: "+fmtMoney(spaUnit)+"/"+uom,{color:"#4ade80"}));
+      pr.appendChild(tx("Sell: "+fmtMoney(spaUnit*(1+m/100))+"/"+uom,{color}));
       ic.appendChild(pr);panel.appendChild(ic);
     });
     const tot=h("div",{class:"subcard",style:{padding:"10px 12px",marginTop:"4px"}});
@@ -946,6 +992,13 @@ function render(){
     tab.appendChild(h("span",{style:{marginLeft:"4px",background:"#131b28",borderRadius:"10px",padding:"1px 5px",fontSize:"9px",color:"#2a3a52"}},String(count)));
     if(hasWarn)tab.appendChild(tx(" ⚠",{fontSize:"9px"}));
     tab.addEventListener("click",()=>set({activeEU:eu.name,selSPA:null,searchQ:""}));
+    if(!isAll){
+      const editBtn=h("span",{style:{marginLeft:"5px",fontSize:"9px",color:"#2a3a52",cursor:"pointer",padding:"0 2px"},title:"Rename account"},"✏");
+      editBtn.addEventListener("click",e=>{e.stopPropagation();set({showEditEU:true,editEUOld:eu.name,editEUName:eu.name});});
+      const delBtn=h("span",{style:{marginLeft:"2px",fontSize:"9px",color:"#2a3a52",cursor:"pointer",padding:"0 2px"},title:"Delete account"},"✕");
+      delBtn.addEventListener("click",e=>{e.stopPropagation();set({showDeleteEU:true,deleteEUName:eu.name});});
+      tab.appendChild(editBtn);tab.appendChild(delBtn);
+    }
     tabs.appendChild(tab);
   });
   const addTab=h("div",{class:"eutab eutab-add"},"+ Add Account");
@@ -1027,6 +1080,32 @@ function render(){
       catch(e){toast("Error: "+e.message,"err");}
     });
     cb.style.flex="2";br.appendChild(cb);box.appendChild(br);bd.appendChild(box);app.appendChild(bd);
+  }
+
+  if(S.showEditEU){
+    const bd=h("div",{class:"modal-backdrop"});
+    bd.addEventListener("click",e=>{if(e.target===bd)set({showEditEU:false});});
+    const box=h("div",{class:"modal-box sm fadein"});
+    box.appendChild(h("div",{class:"syne mb4",style:{fontSize:"15px",fontWeight:"700"}},"Rename Account"));
+    box.appendChild(lbl("New Account Name"));
+    const ri=mkInp({type:"text",placeholder:"Enter new name",style:{marginBottom:"14px"}},S.editEUName,v=>S.editEUName=v);
+    ri.addEventListener("keydown",e=>{if(e.key==="Enter")doRenameEU();});
+    box.appendChild(ri);
+    const br=h("div",{class:"flex gap8"});
+    br.appendChild(btn("Cancel","btn btn-ghost",()=>set({showEditEU:false})));
+    const rb=btn("Rename","btn btn-primary",doRenameEU);rb.style.flex="2";br.appendChild(rb);
+    box.appendChild(br);bd.appendChild(box);app.appendChild(bd);
+  }
+
+  if(S.showDeleteEU){
+    const bd=h("div",{class:"modal-backdrop"});
+    const box=h("div",{class:"modal-box sm fadein"});
+    box.appendChild(h("div",{class:"syne mb10",style:{fontSize:"15px",fontWeight:"700",color:"#f87171"}},"Delete Account?"));
+    box.appendChild(tx("This will permanently delete "+S.deleteEUName+" and ALL of their SPAs from the database. This cannot be undone.",{fontSize:"12px",color:"#8ba9d4",display:"block",marginBottom:"16px"}));
+    const br=h("div",{class:"flex gap8"});
+    br.appendChild(btn("Cancel","btn btn-ghost",()=>set({showDeleteEU:false})));
+    const db=btn("Yes, Delete Account","btn btn-danger",doDeleteEU);db.style.flex="2";br.appendChild(db);
+    box.appendChild(br);bd.appendChild(box);app.appendChild(bd);
   }
 
   if(S.toast) app.appendChild(h("div",{class:"toast "+S.toast.type},S.toast.msg));
