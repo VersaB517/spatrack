@@ -6,9 +6,9 @@
 <title>SPAtrack</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Syne:wght@700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'IBM Plex Mono',monospace;font-size:13px;}
+html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',sans-serif;font-size:14px;}
 ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:#0d1117;} ::-webkit-scrollbar-thumb{background:#1e2d42;border-radius:2px;}
 #app{display:flex;flex-direction:column;min-height:100vh;}
 
@@ -17,27 +17,34 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'IBM Plex Mon
 .logo{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;color:#4f8ef7;letter-spacing:-.02em;cursor:default;}
 .logo span{color:#2a3a52;}
 .nav-divider{width:1px;height:20px;background:#131b28;}
-.navitem{padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#64748b;transition:all .15s;font-family:'IBM Plex Mono',monospace;font-weight:600;border:1px solid transparent;}
+.navitem{padding:7px 16px;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#64748b;transition:all .15s;font-family:'DM Sans',sans-serif;font-weight:600;border:1px solid transparent;}
 .navitem:hover{background:rgba(79,142,247,.1);color:#8ba9d4;border-color:#1e2d42;}
 .navitem.active{color:#4f8ef7;background:rgba(79,142,247,.15);border-color:rgba(79,142,247,.4);}
 .nav-right{margin-left:auto;display:flex;align-items:center;gap:8px;}
 .alert-pill{background:#2d0a0a;border:1px solid #5c1a1a;border-radius:20px;padding:3px 10px;font-size:10px;color:#f87171;letter-spacing:.06em;animation:pu 2s ease-in-out infinite;}
 @keyframes pu{0%,100%{opacity:1;}50%{opacity:.4;}}
 
-/* EU TABS */
-#eutabs{display:flex;align-items:center;gap:5px;padding:7px 24px;border-bottom:1px solid #131b28;background:#05070d;flex-shrink:0;overflow-x:auto;}
-.eu-label{font-size:10px;color:#2a3a52;letter-spacing:.1em;text-transform:uppercase;margin-right:8px;white-space:nowrap;font-weight:600;}
-.eutab{padding:5px 13px;border-radius:20px;cursor:pointer;font-size:12px;border:1px solid transparent;white-space:nowrap;color:#64748b;transition:all .15s;font-family:'IBM Plex Mono',monospace;font-weight:500;}
-.eutab:hover{color:#8ba9d4;}
-.eutab.active{background:rgba(79,142,247,.1);color:#4f8ef7;border-color:rgba(79,142,247,.3);}
-.eutab-add{border-style:dashed;border-color:#1e2a38;color:#2a3a52;}
+/* ACCOUNT BAR */
+#accountbar{display:flex;align-items:center;gap:12px;padding:8px 24px;border-bottom:1px solid #131b28;background:#05070d;flex-shrink:0;}
+.eu-label{font-size:10px;color:#2a3a52;letter-spacing:.1em;text-transform:uppercase;font-weight:600;white-space:nowrap;}
+.eu-select-wrap{position:relative;flex:0 0 auto;}
+.eu-select{appearance:none;-webkit-appearance:none;background:#0d1117;color:#dde3f0;border:1px solid #1e2d42;border-radius:8px;padding:7px 36px 7px 14px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;outline:none;min-width:180px;transition:border-color .15s;}
+.eu-select:focus{border-color:#4f8ef7;}
+.eu-select-arrow{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;color:#4a5568;font-size:11px;}
+.eu-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.eu-add-btn{background:transparent;border:1px dashed #1e2a38;border-radius:8px;padding:7px 13px;font-family:'DM Sans',sans-serif;font-size:12px;color:#2a3a52;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.eu-add-btn:hover{color:#64748b;border-color:#2a3a52;}
+.eu-actions{display:flex;gap:6px;margin-left:auto;}
+.eu-action-btn{background:transparent;border:1px solid #1e2d42;border-radius:6px;padding:5px 10px;font-family:'DM Sans',sans-serif;font-size:11px;color:#4a5568;cursor:pointer;transition:all .15s;}
+.eu-action-btn:hover{color:#8ba9d4;border-color:#2a3a52;}
+.eu-action-btn.danger:hover{color:#f87171;border-color:#5c1a1a;}
 
 /* SEARCH BAR */
 #searchbar{padding:10px 24px;border-bottom:1px solid #131b28;background:#07090f;flex-shrink:0;}
 .search-wrap{display:flex;align-items:center;gap:10px;background:#0d1117;border:1px solid #1e2d42;border-radius:8px;padding:8px 14px;transition:border-color .15s;}
 .search-wrap:focus-within{border-color:#4f8ef7;}
 .search-wrap svg{color:#2a3a52;flex-shrink:0;}
-.search-inp{background:transparent;border:none;outline:none;color:#dde3f0;font-family:'IBM Plex Mono',monospace;font-size:12px;flex:1;}
+.search-inp{background:transparent;border:none;outline:none;color:#dde3f0;font-family:'DM Sans',sans-serif;font-size:12px;flex:1;}
 .search-inp::placeholder{color:#2a3a52;}
 .search-clear{background:transparent;border:none;color:#4a5568;cursor:pointer;font-size:14px;padding:0 2px;}
 .search-clear:hover{color:#8ba9d4;}
@@ -54,7 +61,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'IBM Plex Mon
 .stat-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:700;}
 
 /* BUTTONS */
-.btn{border:none;border-radius:5px;padding:6px 13px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.05em;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
+.btn{border:none;border-radius:5px;padding:6px 13px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.05em;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
 .btn:hover:not(:disabled){filter:brightness(1.2);}
 .btn:disabled{opacity:.35;cursor:not-allowed;filter:none;}
 .btn-primary{background:#1d4ed8;color:#fff;}
@@ -66,7 +73,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'IBM Plex Mon
 .btn-sm{padding:3px 8px;font-size:10px;}
 
 /* INPUTS */
-.inp{background:#09111a;color:#dde3f0;border:1px solid #1e2d42;border-radius:5px;padding:7px 10px;font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none;width:100%;}
+.inp{background:#09111a;color:#dde3f0;border:1px solid #1e2d42;border-radius:5px;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:100%;}
 .inp:focus{border-color:#4f8ef7;}
 .inp.ai-filled{border-color:#5b21b6;background:rgba(91,33,182,.08);}
 
@@ -148,7 +155,7 @@ async function apiDel(p)      { const r=await fetch(p,{method:"DELETE"}); if(!r.
 
 async function loadAll() {
   const [raw, margins] = await Promise.all([apiGet("/api/spas"), apiGet("/api/margins")]);
-  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
+  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],docUrl:r.doc_url||"",status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
   return {spas,margins};
 }
 
@@ -165,7 +172,7 @@ function buildEUs(spas,margins) {
   const names=[...new Set([...spas.map(s=>s.endUser),...Object.keys(margins)])];
   return names.map((name,i)=>({name,color:EU_COLORS[i%EU_COLORS.length]}));
 }
-function blankSPA()  { return {vendor:"",endUser:"",spaNumber:"",discount:"",expiration:"",category:"",items:[],_ni:blankItem()}; }
+function blankSPA()  { return {vendor:"",endUser:"",spaNumber:"",discount:"",expiration:"",category:"",items:[],docUrl:"",_ni:blankItem()}; }
 function blankItem() { return {partNumber:"",description:"",listPrice:"",qty:"",uom:"EA"}; }
 function loadKey()   { try{return window.__ANTHROPIC_KEY||localStorage.getItem(APIKEY_KEY)||""; }catch(e){return "";} }
 function saveKey(k)  { try{localStorage.setItem(APIKEY_KEY,k);}catch(e){} }
@@ -201,7 +208,7 @@ function toast(msg,type="ok",ms=3000){ S.toast={msg,type};render();setTimeout(()
 // ═══════════════════════════════════════════
 async function doAddSPA(spa) {
   try {
-    const row=await apiPost("/api/spas",{vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items});
+    const row=await apiPost("/api/spas",{vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
     const ns={id:row.id,vendor:row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],status:calcStatus(row.expiration)};
     S.spas=[...S.spas,ns];
     if(S.margins[spa.endUser]===undefined){await apiPost("/api/margins",{end_user:spa.endUser,margin:15});S.margins[spa.endUser]=15;}
@@ -214,7 +221,7 @@ async function doAddSPA(spa) {
 async function doEditSPA() {
   try {
     const spa=S.editSPA;
-    const row=await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items});
+    const row=await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
     const us={id:row.id,vendor:row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],status:calcStatus(row.expiration)};
     S.spas=S.spas.map(s=>s.id===us.id?us:s);
     S.selSPA=us;S.showEdit=false;S.editSPA=null;
@@ -312,17 +319,27 @@ async function doExtract() {
   if(!S.apiKey){alert("Please set your Anthropic API key first.");return;}
   S.imp.busy=true;S.imp.step="extracting";render();
 
-  const prompt=`You are parsing a Special Pricing Agreement (SPA) document. Extract all data and return ONLY a valid JSON object (no markdown, no explanation):
+  const prompt=`You are parsing a Special Pricing Agreement (SPA) or price quote document. Extract all data and return ONLY a valid JSON object (no markdown, no explanation):
 {
   "vendor": "manufacturer name",
   "endUser": "end-user customer name",
-  "spaNumber": "SPA reference number",
-  "discount": 25.5,
+  "spaNumber": "SPA or quote reference number",
+  "discount": 0,
   "expiration": "YYYY-MM-DD",
   "category": "Cabling|Fiber|Enclosures|Racks|Connectivity|Infrastructure|Other",
-  "items": [{"partNumber":"","description":"","listPrice":0.00,"qty":1,"uom":"EA"}]
+  "items": [{"partNumber":"","description":"","listPrice":0.00,"qty":1,"uom":"FT"}]
 }
-Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=per-unit price (NOT total), qty=quantity, uom=unit of measure (EA/FT/MF/PK/BOX/ROLL/PR/CTN). Use "" or 0 for missing. items=[] if none found. IMPORTANT: listPrice must be the price per single unit, not the extended/total price.`;
+
+CRITICAL PRICING RULES — read carefully:
+- listPrice must ALWAYS be the price per single unit (per 1 FT, per 1 EA, etc.)
+- If pricing is shown as per 1000 FT (e.g. "262.00/1000 FT" or "0.6316 per 1000 FT" or price column says "PRICE PER UOM" with UOM=1000): divide by 1000 to get per-FT price. Example: 262.00/1000FT = 0.262/FT
+- If pricing is shown as "/MF" or "per MF" or "per M feet": divide by 1000. Example: $504.00/MF = $0.504/FT
+- If the document has columns like "ORD QTY UOM" showing 1000 and "PRICE PER UOM": the price shown is per 1000 units — divide by 1000
+- uom should always be the base unit: use FT (not MF or /1000FT), EA, PK, BOX, ROLL, PR, CTN
+- qty is the total quantity ordered (e.g. 100000 FT, 50000 FT)
+- discount: if individual item prices are already the SPA prices (no separate list price shown), set discount to 0
+- expiration: use the Agreement End Date or expiration date. Format YYYY-MM-DD
+- Use 0 for missing numbers, "" for missing strings. items=[] if none found.`;
 
   try {
     let messageContent;
@@ -334,11 +351,15 @@ Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=per-unit price (NOT 
     } else if(S.imp.fileType==="excel"){
       messageContent=[{type:"text",text:prompt+"\n\nHere is the spreadsheet data in CSV format:\n\n"+S.imp.csvText}];
     } else {
-      // Word doc — send as text extraction via base64
-      messageContent=[
-        {type:"document",source:{type:"base64",media_type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",data:S.imp.b64}},
-        {type:"text",text:prompt}
-      ];
+      try {
+        const bytes=new Uint8Array(Uint8Array.from(atob(S.imp.b64),c=>c.charCodeAt(0)).buffer);
+        const raw=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
+        const matches=raw.match(/<w:t[^>]*>([^<]+)<\/w:t>/g)||[];
+        const docText=matches.map(m=>m.replace(/<[^>]+>/g,"")).join(" ").trim()||"[Could not extract text]";
+        messageContent=[{type:"text",text:prompt+"\n\nWord document text content:\n\n"+docText}];
+      } catch(we) {
+        messageContent=[{type:"text",text:prompt+"\n\nWord document could not be read. Return empty JSON."}];
+      }
     }
 
     const resp=await fetch("https://api.anthropic.com/v1/messages",{
@@ -360,6 +381,24 @@ Rules: discount=number(%), expiration=YYYY-MM-DD, listPrice=per-unit price (NOT 
     S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
   }
   render();
+}
+
+async function uploadDocToSupabase(file, spaId) {
+  // Upload PDF to Supabase Storage via signed URL approach
+  // Uses the REST API directly
+  const SUPA_URL = document.querySelector('meta[name="supa-url"]')?.content || "";
+  const SUPA_KEY = document.querySelector('meta[name="supa-key"]')?.content || "";
+  if(!SUPA_URL||!SUPA_KEY) return null;
+  try {
+    const path = "spa-docs/"+spaId+"-"+Date.now()+".pdf";
+    const resp = await fetch(SUPA_URL+"/storage/v1/object/spa-documents/"+path, {
+      method:"POST",
+      headers:{"Authorization":"Bearer "+SUPA_KEY,"Content-Type":file.type||"application/pdf","x-upsert":"true"},
+      body: file
+    });
+    if(!resp.ok) return null;
+    return SUPA_URL+"/storage/v1/object/public/spa-documents/"+path;
+  } catch(e) { return null; }
 }
 
 // ═══════════════════════════════════════════
@@ -629,11 +668,11 @@ function renderSearch(){
       irow.appendChild(it);
 
       const pr=h("div",{class:"flex gap12",style:{fontSize:"11px",flexWrap:"wrap"}});
-      pr.appendChild(tx("List: "+fmtMoney(item.listPrice),{color:"#4a5568"}));
-      pr.appendChild(tx("Qty: "+item.qty,{color:"#4a5568"}));
+      pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+(item.uom||"EA"),{color:"#4a5568"}));
+      pr.appendChild(tx("Qty: "+item.qty+" "+(item.uom||"EA"),{color:"#4a5568"}));
       pr.appendChild(tx("Disc: "+spa.discount+"%",{color:"#4f8ef7"}));
-      pr.appendChild(tx("SPA Cost: "+fmtMoney(cost),{color:"#4ade80"}));
-      pr.appendChild(tx("Sell ("+m+"%): "+fmtMoney(cost*(1+m/100)),{color}));
+      pr.appendChild(tx("SPA: "+fmtMoney(item.listPrice*(1-spa.discount/100))+"/"+(item.uom||"EA"),{color:"#4ade80"}));
+      pr.appendChild(tx("Total: "+fmtMoney(item.listPrice*(1-spa.discount/100)*item.qty),{color:"#8ba9d4"}));
       irow.appendChild(pr);
       card.appendChild(irow);
     });
@@ -818,6 +857,33 @@ function renderSPAs(allEUs){
       meta.appendChild(mc);
     });
     panel.appendChild(meta);
+    // Document attachment section
+    const docRow=h("div",{class:"flex gap6 mb10",style:{alignItems:"center"}});
+    if(spa.docUrl){
+      const viewBtn=h("a",{href:spa.docUrl,target:"_blank",class:"btn btn-muted",style:{fontSize:"11px",textDecoration:"none"}},"📄 View Original Document");
+      docRow.appendChild(viewBtn);
+    }
+    const uploadLabel=h("label",{class:"btn btn-ghost",style:{fontSize:"11px",cursor:"pointer"}},spa.docUrl?"↑ Replace Doc":"📎 Attach PDF");
+    const uploadInput=h("input",{type:"file",accept:".pdf",style:{display:"none"}});
+    uploadInput.addEventListener("change",async e=>{
+      const f=e.target.files[0];if(!f)return;
+      toast("Uploading document...");
+      const reader=new FileReader();
+      reader.onload=async()=>{
+        // Store as data URL for now (Option 3 upgrade: use Supabase Storage)
+        const dataUrl=reader.result;
+        try{
+          await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:spa.discount,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:dataUrl,renewal_status:spa.renewalStatus||null});
+          S.spas=S.spas.map(s=>s.id===spa.id?{...s,docUrl:dataUrl}:s);
+          S.selSPA={...spa,docUrl:dataUrl};
+          toast("Document attached ✓");
+        }catch(err){toast("Upload failed: "+err.message,"err");}
+      };
+      reader.readAsDataURL(f);
+    });
+    uploadLabel.appendChild(uploadInput);
+    docRow.appendChild(uploadLabel);
+    panel.appendChild(docRow);
     panel.appendChild(h("div",{class:"stat-label mb6"},"Line Items"));
     spa.items.forEach(item=>{
       const uom=item.uom||"EA";
@@ -830,7 +896,7 @@ function renderSPAs(allEUs){
       pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+uom,{color:"#4a5568"}));
       pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#4a5568"}));
       pr.appendChild(tx("SPA: "+fmtMoney(spaUnit)+"/"+uom,{color:"#4ade80"}));
-      pr.appendChild(tx("Sell: "+fmtMoney(spaUnit*(1+m/100))+"/"+uom,{color}));
+      pr.appendChild(tx("Total: "+fmtMoney(spaUnit*item.qty),{color:"#8ba9d4"}));
       ic.appendChild(pr);panel.appendChild(ic);
     });
     const tot=h("div",{class:"subcard",style:{padding:"10px 12px",marginTop:"4px"}});
@@ -979,32 +1045,54 @@ function render(){
   nav.appendChild(nr);
   app.appendChild(nav);
 
-  // ── EU TABS ──
-  const tabs=h("div",{id:"eutabs"});
-  tabs.appendChild(h("span",{class:"eu-label"},"Account"));
-  [{name:"all",color:"#4a5568"},...allEUs].forEach(eu=>{
-    const isAll=eu.name==="all",isActive=S.activeEU===eu.name&&!searchActive;
-    const count=isAll?S.spas.length:S.spas.filter(s=>s.endUser===eu.name).length;
-    const hasWarn=!isAll&&S.spas.some(s=>s.endUser===eu.name&&(s.status==="expiring"||s.status==="expired"));
-    const tab=h("div",{class:"eutab"+(isActive?" active":""),style:isActive?{background:eu.color+"18",color:eu.color,borderColor:eu.color+"44"}:{}});
-    if(!isAll){const d=dot(eu.color,5);d.style.marginRight="5px";tab.appendChild(d);}
-    tab.appendChild(document.createTextNode(isAll?"All Accounts":eu.name));
-    tab.appendChild(h("span",{style:{marginLeft:"4px",background:"#131b28",borderRadius:"10px",padding:"1px 5px",fontSize:"9px",color:"#2a3a52"}},String(count)));
-    if(hasWarn)tab.appendChild(tx(" ⚠",{fontSize:"9px"}));
-    tab.addEventListener("click",()=>set({activeEU:eu.name,selSPA:null,searchQ:""}));
-    if(!isAll){
-      const editBtn=h("span",{style:{marginLeft:"5px",fontSize:"9px",color:"#2a3a52",cursor:"pointer",padding:"0 2px"},title:"Rename account"},"✏");
-      editBtn.addEventListener("click",e=>{e.stopPropagation();set({showEditEU:true,editEUOld:eu.name,editEUName:eu.name});});
-      const delBtn=h("span",{style:{marginLeft:"2px",fontSize:"9px",color:"#2a3a52",cursor:"pointer",padding:"0 2px"},title:"Delete account"},"✕");
-      delBtn.addEventListener("click",e=>{e.stopPropagation();set({showDeleteEU:true,deleteEUName:eu.name});});
-      tab.appendChild(editBtn);tab.appendChild(delBtn);
-    }
-    tabs.appendChild(tab);
+  // ── ACCOUNT BAR (dropdown) ──
+  const accountBar=h("div",{id:"accountbar"});
+  accountBar.appendChild(h("span",{class:"eu-label"},"Account"));
+
+  // Dropdown select
+  const selWrap=h("div",{class:"eu-select-wrap"});
+  const euSel2=h("select",{class:"eu-select"});
+  const allOpt=h("option",{value:"all"},"All Accounts ("+S.spas.length+")");
+  if(S.activeEU==="all") allOpt.selected=true;
+  euSel2.appendChild(allOpt);
+  allEUs.forEach(eu=>{
+    const count=S.spas.filter(s=>s.endUser===eu.name).length;
+    const hasWarn=S.spas.some(s=>s.endUser===eu.name&&(s.status==="expiring"||s.status==="expired"));
+    const opt=h("option",{value:eu.name},(hasWarn?"⚠ ":"")+eu.name+" ("+count+")");
+    if(S.activeEU===eu.name) opt.selected=true;
+    euSel2.appendChild(opt);
   });
-  const addTab=h("div",{class:"eutab eutab-add"},"+ Add Account");
-  addTab.addEventListener("click",()=>set({showAddEU:true,newEU:""}));
-  tabs.appendChild(addTab);
-  app.appendChild(tabs);
+  euSel2.addEventListener("change",e=>set({activeEU:e.target.value,selSPA:null,searchQ:""}));
+  selWrap.appendChild(euSel2);
+  selWrap.appendChild(h("span",{class:"eu-select-arrow"},"▾"));
+  accountBar.appendChild(selWrap);
+
+  // Color dot for selected account
+  if(S.activeEU!=="all"){
+    const selEU=allEUs.find(e=>e.name===S.activeEU);
+    if(selEU){
+      const d=h("span",{class:"eu-dot",style:{background:selEU.color,flexShrink:"0"}});
+      selWrap.insertBefore(d,euSel2);
+    }
+  }
+
+  // Add account button
+  const addAccBtn=h("button",{class:"eu-add-btn"},"+  Add Account");
+  addAccBtn.addEventListener("click",()=>set({showAddEU:true,newEU:""}));
+  accountBar.appendChild(addAccBtn);
+
+  // Edit / Delete buttons for selected account
+  if(S.activeEU!=="all"){
+    const actions=h("div",{class:"eu-actions"});
+    const editAccBtn=h("button",{class:"eu-action-btn"},"✏ Rename");
+    editAccBtn.addEventListener("click",()=>set({showEditEU:true,editEUOld:S.activeEU,editEUName:S.activeEU}));
+    const delAccBtn=h("button",{class:"eu-action-btn danger"},"✕ Delete Account");
+    delAccBtn.addEventListener("click",()=>set({showDeleteEU:true,deleteEUName:S.activeEU}));
+    actions.appendChild(editAccBtn);actions.appendChild(delAccBtn);
+    accountBar.appendChild(actions);
+  }
+
+  app.appendChild(accountBar);
 
   // ── SEARCH BAR ──
   const sb=h("div",{id:"searchbar"});
