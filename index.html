@@ -26,13 +26,13 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 
 /* ACCOUNT BAR */
 #accountbar{display:flex;align-items:center;gap:12px;padding:8px 24px;border-bottom:1px solid #131b28;background:#05070d;flex-shrink:0;}
-.eu-label{font-size:10px;color:#2a3a52;letter-spacing:.1em;text-transform:uppercase;font-weight:600;white-space:nowrap;}
+.eu-label{font-size:11px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;font-weight:600;white-space:nowrap;}
 .eu-select-wrap{position:relative;flex:0 0 auto;}
 .eu-select{appearance:none;-webkit-appearance:none;background:#0d1117;color:#dde3f0;border:1px solid #1e2d42;border-radius:8px;padding:7px 36px 7px 14px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;outline:none;min-width:180px;transition:border-color .15s;}
 .eu-select:focus{border-color:#4f8ef7;}
 .eu-select-arrow{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;color:#4a5568;font-size:11px;}
 .eu-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
-.eu-add-btn{background:transparent;border:1px dashed #1e2a38;border-radius:8px;padding:7px 13px;font-family:'DM Sans',sans-serif;font-size:12px;color:#2a3a52;cursor:pointer;transition:all .15s;white-space:nowrap;}
+.eu-add-btn{background:transparent;border:1px dashed #2a3a52;border-radius:8px;padding:7px 13px;font-family:'DM Sans',sans-serif;font-size:12px;color:#4a5568;cursor:pointer;transition:all .15s;white-space:nowrap;}
 .eu-add-btn:hover{color:#64748b;border-color:#2a3a52;}
 .eu-actions{display:flex;gap:6px;margin-left:auto;}
 .eu-action-btn{background:transparent;border:1px solid #1e2d42;border-radius:6px;padding:5px 10px;font-family:'DM Sans',sans-serif;font-size:11px;color:#4a5568;cursor:pointer;transition:all .15s;}
@@ -45,7 +45,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .search-wrap:focus-within{border-color:#4f8ef7;}
 .search-wrap svg{color:#2a3a52;flex-shrink:0;}
 .search-inp{background:transparent;border:none;outline:none;color:#dde3f0;font-family:'DM Sans',sans-serif;font-size:12px;flex:1;}
-.search-inp::placeholder{color:#2a3a52;}
+.search-inp::placeholder{color:#4a5568;}
 .search-clear{background:transparent;border:none;color:#4a5568;cursor:pointer;font-size:14px;padding:0 2px;}
 .search-clear:hover{color:#8ba9d4;}
 
@@ -57,7 +57,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .subcard{background:#09111a;border:1px solid #131b28;border-radius:6px;}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
 .stat-card{background:#0d1117;border:1px solid #131b28;border-radius:8px;padding:14px 18px;}
-.stat-label{font-size:9px;color:#2a3a52;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px;}
+.stat-label{font-size:10px;color:#64748b;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;font-weight:500;}
 .stat-val{font-family:'Syne',sans-serif;font-size:28px;font-weight:700;}
 
 /* BUTTONS */
@@ -79,7 +79,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 
 /* TABLE */
 .tbl-wrap{border:1px solid #131b28;border-radius:8px;overflow:hidden;}
-.tbl-hdr{background:#09111a;padding:7px 14px;display:grid;font-size:9px;color:#2a3a52;letter-spacing:.1em;text-transform:uppercase;}
+.tbl-hdr{background:#09111a;padding:7px 14px;display:grid;font-size:10px;color:#64748b;letter-spacing:.08em;text-transform:uppercase;font-weight:500;}
 .tbl-row{padding:10px 14px;display:grid;border-top:1px solid #0d1520;align-items:center;cursor:pointer;transition:background .1s;}
 .tbl-row:nth-child(odd){background:#0d1117;}
 .tbl-row:nth-child(even){background:#09111a;}
@@ -107,7 +107,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .mt4{margin-top:4px;}.mt8{margin-top:8px;}.mt12{margin-top:12px;}
 .w100{width:100%;} .f11{font-size:11px;} .f12{font-size:12px;}
 .overflow-hidden{overflow:hidden;} .sticky-top{position:sticky;top:0;}
-.text-muted{color:#4a5568;}
+.text-muted{color:#64748b;}
 .syne{font-family:'Syne',sans-serif;}
 
 /* IMPORT ZONE */
@@ -133,6 +133,10 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 
 /* FILE TYPE ICONS */
 .file-icon{font-size:28px;margin-bottom:8px;}
+/* PDF VIEWER */
+.pdf-viewer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;z-index:600;padding:20px;}
+.pdf-viewer-header{display:flex;align-items:center;gap:12px;width:100%;max-width:900px;margin-bottom:12px;}
+.pdf-viewer-frame{width:100%;max-width:900px;flex:1;border-radius:8px;border:1px solid #1e2d42;background:#fff;}
 </style>
 </head>
 <body>
@@ -155,7 +159,7 @@ async function apiDel(p)      { const r=await fetch(p,{method:"DELETE"}); if(!r.
 
 async function loadAll() {
   const [raw, margins] = await Promise.all([apiGet("/api/spas"), apiGet("/api/margins")]);
-  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],docUrl:r.doc_url||"",status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
+  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],docUrl:r.doc_url||"",renewalRequested:r.renewal_requested||false,status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
   return {spas,margins};
 }
 
@@ -244,6 +248,16 @@ async function doAddEU() {
 async function doUpdateMargin(eu,m) {
   try{await apiPost("/api/margins",{end_user:eu,margin:m});S.margins[eu]=m;render();}
   catch(e){toast("Margin save failed","err");}
+}
+
+async function toggleRenewalRequested(spa) {
+  const newVal = !spa.renewalRequested;
+  try {
+    await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:spa.discount,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null,renewal_requested:newVal});
+    S.spas=S.spas.map(s=>s.id===spa.id?{...s,renewalRequested:newVal}:s);
+    if(S.selSPA?.id===spa.id) S.selSPA={...S.selSPA,renewalRequested:newVal};
+    toast(newVal?"Marked as Requested ✓":"Request mark removed");
+  } catch(e){toast("Update failed","err");}
 }
 
 async function doRenameEU() {
@@ -369,8 +383,29 @@ CRITICAL PRICING RULES — read carefully:
     });
     if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||"API error "+resp.status);}
     const data=await resp.json();
-    const raw=data.content.map(c=>c.text||"").join("").trim().replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
-    const ex=JSON.parse(raw);
+    let raw=data.content.map(c=>c.text||"").join("").trim().replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
+    // Attempt to repair truncated JSON from large PDFs
+    let ex;
+    try {
+      ex=JSON.parse(raw);
+    } catch(parseErr) {
+      // Try to repair: close open arrays and objects
+      try {
+        let fixed=raw;
+        // Remove trailing incomplete item (last comma or partial object)
+        fixed=fixed.replace(/,\s*\{[^}]*$/,"");
+        fixed=fixed.replace(/,\s*"[^"]*":\s*[^,}\]]*$/,"");
+        // Count unclosed brackets and close them
+        const opens=(fixed.match(/\[/g)||[]).length-(fixed.match(/\]/g)||[]).length;
+        const openb=(fixed.match(/\{/g)||[]).length-(fixed.match(/\}/g)||[]).length;
+        for(let i=0;i<opens;i++) fixed+="]";
+        for(let i=0;i<openb;i++) fixed+="}";
+        ex=JSON.parse(fixed);
+        toast("⚠ Large document — partial extraction saved. Review carefully.","ok",6000);
+      } catch(e2) {
+        throw new Error("Could not parse AI response. Document may be too large or complex. Try splitting into smaller sections.");
+      }
+    }
     // Try to match extracted endUser to existing accounts, otherwise leave blank for manual selection
     const extractedEU = ex.endUser||"";
     const allEUNames = Object.keys(S.margins);
@@ -734,7 +769,7 @@ function renderDashboard(allEUs){
       if(xp>0) r2.appendChild(tx("✕ "+xp+" expired",{color:"#f87171"}));
       if(!exp&&!xp&&euSpas.length>0)r2.appendChild(tx("✓ All current",{color:"#4ade80"}));
       c.appendChild(r2);
-      c.appendChild(tx("Margin: "+(S.margins[eu.name]??15)+"%",{fontSize:"10px",color:"#4a5568"}));
+      c.appendChild(tx("Margin: "+(S.margins[eu.name]??15)+"%",{fontSize:"11px",color:"#64748b"}));
       grid.appendChild(c);
     });
     wrap.appendChild(grid);
@@ -773,7 +808,7 @@ function renderDashboard(allEUs){
     const s=ST[spa.status],days=daysUntil(spa.expiration),pct=Math.max(0,Math.min(100,(days/365)*100));
     const row=h("div",{style:{display:"flex",alignItems:"center",gap:"8px"}});
     if(S.activeEU==="all")row.appendChild(dot(euCol(spa.endUser,allEUs),5));
-    row.appendChild(tx(spa.vendor,{width:"66px",fontSize:"10px",color:"#4a5568",textAlign:"right",flexShrink:"0",display:"inline-block"}));
+    row.appendChild(tx(spa.vendor,{width:"66px",fontSize:"10px",color:"#64748b",textAlign:"right",flexShrink:"0",display:"inline-block"}));
     const bar=h("div",{style:{flex:"1",height:"5px",background:"#131b28",borderRadius:"3px",overflow:"hidden"}});
     bar.appendChild(h("div",{style:{height:"100%",width:pct+"%",background:s.color,borderRadius:"3px"}}));
     row.appendChild(bar);
@@ -817,16 +852,24 @@ function renderSPAs(allEUs){
     row.addEventListener("click",()=>set({selSPA:isSel?null:spa}));
     const vc=h("div");
     vc.appendChild(tx(spa.vendor,{fontWeight:"600",fontSize:"12px",display:"block"}));
-    vc.appendChild(tx(spa.spaNumber,{fontSize:"9px",color:"#2a3a52",display:"block",marginTop:"2px"}));
+    vc.appendChild(tx(spa.spaNumber,{fontSize:"10px",color:"#4a5568",display:"block",marginTop:"2px"}));
     row.appendChild(vc);
     if(S.activeEU==="all")row.appendChild(h("div",{},pill(spa.endUser,euCol(spa.endUser,allEUs))));
     row.appendChild(tx(spa.category,{fontSize:"11px",color:"#4a5568"}));
     row.appendChild(h("span",{class:"syne",style:{fontSize:"13px",fontWeight:"700",color:"#4f8ef7"}},spa.discount+"%"));
     const dc=h("div");
     dc.appendChild(tx(fmtDate(spa.expiration),{fontSize:"10px",display:"block"}));
-    dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days+"d left",{fontSize:"9px",color:days<0?"#f87171":days<=EXPIRING_DAYS?"#fbbf24":"#4a5568",display:"block",marginTop:"1px"}));
+    dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days+"d left",{fontSize:"10px",color:days<0?"#f87171":days<=EXPIRING_DAYS?"#fbbf24":"#64748b",display:"block",marginTop:"1px"}));
     row.appendChild(dc);
-    row.appendChild(h("div",{},badge(spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].label:s.label,spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].color:s.color,spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].bg:s.bg)));
+    // Status badge + renewal requested button
+    const statusCell=h("div",{style:{display:"flex",flexDirection:"column",gap:"4px"}});
+    statusCell.appendChild(badge(spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].label:s.label,spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].color:s.color,spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].bg:s.bg));
+    if(spa.status==="expiring"||spa.status==="expired"||spa.renewalRequested){
+      const reqBtn=h("button",{style:{border:"none",borderRadius:"3px",padding:"2px 6px",fontSize:"9px",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:"600",letterSpacing:".04em",transition:"all .15s",background:spa.renewalRequested?"rgba(34,211,238,.15)":"rgba(100,116,139,.1)",color:spa.renewalRequested?"#22d3ee":"#64748b",borderStyle:"solid",borderWidth:"1px",borderColor:spa.renewalRequested?"rgba(34,211,238,.4)":"rgba(100,116,139,.2)"}},spa.renewalRequested?"📬 Requested":"📨 Request");
+      reqBtn.addEventListener("click",e=>{e.stopPropagation();toggleRenewalRequested(spa);});
+      statusCell.appendChild(reqBtn);
+    }
+    row.appendChild(statusCell);
     const db=btn("✕","btn btn-ghost btn-sm",e=>{e.stopPropagation();doDelete(spa.id);});
     row.appendChild(h("div",{style:{textAlign:"right"}},db));
     tw.appendChild(row);
@@ -842,7 +885,7 @@ function renderSPAs(allEUs){
     const ph=h("div",{class:"flex mb10",style:{justifyContent:"space-between",alignItems:"start"}});
     const pt=h("div");
     pt.appendChild(tx(spa.vendor,{fontFamily:"'Syne',sans-serif",fontSize:"15px",fontWeight:"700",display:"block"}));
-    pt.appendChild(tx(spa.spaNumber,{fontSize:"10px",color:"#2a3a52",display:"block",marginTop:"2px"}));
+    pt.appendChild(tx(spa.spaNumber,{fontSize:"10px",color:"#64748b",display:"block",marginTop:"2px"}));
     ph.appendChild(pt);
     const cr=h("div",{class:"flex gap6"});
     cr.appendChild(btn("Edit","btn btn-muted",()=>set({showEdit:true,editSPA:{...spa,_ni:blankItem()}})));
@@ -850,7 +893,8 @@ function renderSPAs(allEUs){
     ph.appendChild(cr);panel.appendChild(ph);
     panel.appendChild(h("div",{class:"mb10"},pill(spa.endUser,color)));
     const meta=h("div",{class:"g2 mb10"});
-    [[spa.discount+"%","Discount","#4f8ef7"],[spa.category,"Category","#8ba9d4"],[fmtDate(spa.expiration),"Expires",st.color],[st.label,"Status",st.color]].forEach(([val,lb,c])=>{
+    const statusLabel=(spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].label:st.label)+(spa.renewalRequested?" · 📬 Renewal Requested":"");
+    [[spa.discount+"%","Discount","#4f8ef7"],[spa.category,"Category","#8ba9d4"],[fmtDate(spa.expiration),"Expires",st.color],[statusLabel,"Status",spa.renewalStatus&&ST[spa.renewalStatus]?ST[spa.renewalStatus].color:st.color]].forEach(([val,lb,c])=>{
       const mc=h("div",{class:"subcard",style:{padding:"8px 10px"}});
       mc.appendChild(h("div",{class:"stat-label mb4"},lb));
       mc.appendChild(tx(val,{fontSize:"12px",fontWeight:"600",color:c}));
@@ -860,7 +904,22 @@ function renderSPAs(allEUs){
     // Document attachment section
     const docRow=h("div",{class:"flex gap6 mb10",style:{alignItems:"center"}});
     if(spa.docUrl){
-      const viewBtn=h("a",{href:spa.docUrl,target:"_blank",class:"btn btn-muted",style:{fontSize:"11px",textDecoration:"none"}},"📄 View Original Document");
+      const viewBtn=btn("📄 View Original Document","btn btn-muted",()=>{
+        // Show PDF in embedded modal viewer
+        const bd=h("div",{class:"pdf-viewer-backdrop"});
+        const hd=h("div",{class:"pdf-viewer-header"});
+        hd.appendChild(h("div",{class:"syne",style:{fontSize:"14px",fontWeight:"700",color:"#dde3f0",flex:"1"}},spa.vendor+" · "+spa.spaNumber));
+        const dlBtn=h("a",{href:spa.docUrl,download:spa.vendor+"-"+spa.spaNumber+".pdf",class:"btn btn-muted",style:{textDecoration:"none",fontSize:"11px"}},"⬇ Download");
+        hd.appendChild(dlBtn);
+        hd.appendChild(btn("✕ Close","btn btn-ghost",()=>bd.remove()));
+        bd.appendChild(hd);
+        const frame=h("iframe",{class:"pdf-viewer-frame",src:spa.docUrl});
+        frame.style.height="calc(100vh - 100px)";
+        bd.appendChild(frame);
+        bd.addEventListener("click",e=>{if(e.target===bd)bd.remove();});
+        document.body.appendChild(bd);
+      });
+      viewBtn.style.fontSize="11px";
       docRow.appendChild(viewBtn);
     }
     const uploadLabel=h("label",{class:"btn btn-ghost",style:{fontSize:"11px",cursor:"pointer"}},spa.docUrl?"↑ Replace Doc":"📎 Attach PDF");
