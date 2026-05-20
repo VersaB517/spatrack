@@ -13,14 +13,14 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(data);
     }
     if (req.method === 'POST') {
-      const { vendor, end_user, spa_number, discount, expiration, category, items, renewal_status, doc_url } = req.body;
-      const { data, error } = await supabase.from('spas').insert([{ vendor, end_user, spa_number, discount, expiration, category, items, renewal_status: renewal_status||null, doc_url: doc_url||null }]).select();
+      const { vendor, end_user, spa_number, discount, expiration, category, items, renewal_status, doc_url, renewal_requested } = req.body;
+      const { data, error } = await supabase.from('spas').insert([{ vendor, end_user, spa_number, discount, expiration, category, items, renewal_status: renewal_status||null, doc_url: doc_url||null, renewal_requested: renewal_requested||false }]).select();
       if (error) throw error;
       return res.status(201).json(data[0]);
     }
     if (req.method === 'PUT') {
-      const { id, vendor, end_user, spa_number, discount, expiration, category, items, renewal_status, doc_url } = req.body;
-      const { data, error } = await supabase.from('spas').update({ vendor, end_user, spa_number, discount, expiration, category, items, renewal_status: renewal_status||null, doc_url: doc_url||null }).eq('id', id).select();
+      const { id, vendor, end_user, spa_number, discount, expiration, category, items, renewal_status, doc_url, renewal_requested } = req.body;
+      const { data, error } = await supabase.from('spas').update({ vendor, end_user, spa_number, discount, expiration, category, items, renewal_status: renewal_status||null, doc_url: doc_url||null, renewal_requested: renewal_requested||false }).eq('id', id).select();
       if (error) throw error;
       return res.status(200).json(data[0]);
     }
