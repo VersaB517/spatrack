@@ -125,7 +125,7 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 
 /* SEARCH RESULTS */
 .search-result-tag{background:#131b28;border:1px solid #1e2d42;border-radius:4px;padding:2px 7px;font-size:10px;color:#8ba9d4;display:inline-block;margin:2px;}
-.search-hit{border-left:3px solid;border-radius:7px;padding:12px 16px;margin-bottom:8px;}
+.search-hit{border-left:3px solid;border-radius:8px;padding:16px 20px;margin-bottom:12px;}
 
 /* ANIMATIONS */
 .fadein{animation:fi .2s ease;}
@@ -171,6 +171,14 @@ function daysUntil(d)    { return Math.ceil((new Date(d)-TODAY)/86400000); }
 function calcStatus(d,cur)   { if(cur==="renewal"||cur==="submitted") return cur; const n=daysUntil(d); return n<0?"expired":n<=EXPIRING_DAYS?"expiring":"active"; }
 function fmtDate(d)      { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
 function fmtMoney(v)     { return "$"+Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtSPA(v)       {
+  // Show 4 decimal places for SPA prices — removes trailing zeros but keeps at least 2
+  const n=Number(v||0);
+  const s=n.toFixed(4);
+  // Remove trailing zeros after decimal but keep at least 2 places
+  const trimmed=s.replace(/(\.[0-9]*[1-9])0+$|(\.00)$/, (m,p1,p2)=>p1||p2||".00");
+  return "$"+trimmed;
+}
 function euCol(n,a)      { const e=a.find(x=>x.name===n); return e?e.color:"#4a5568"; }
 function buildEUs(spas,margins) {
   const names=[...new Set([...spas.map(s=>s.endUser),...Object.keys(margins)])];
@@ -660,8 +668,8 @@ function renderSearch(){
 
   const hdg=h("div",{class:"flex gap10 mb16",style:{alignItems:"center"}});
   hdg.appendChild(h("div",{class:"syne",style:{fontSize:"20px",fontWeight:"700",color:"#dde3f0"}},"Search Results"));
-  hdg.appendChild(h("span",{style:{background:"#131b28",border:"1px solid #1e2d42",borderRadius:"20px",padding:"3px 10px",fontSize:"10px",color:"#4a5568"}},results.length+" SPA"+(results.length!==1?"s":"")));
-  hdg.appendChild(tx(' for "'+S.searchQ+'"',{fontSize:"12px",color:"#4a5568"}));
+  hdg.appendChild(h("span",{style:{background:"#131b28",border:"1px solid #1e2d42",borderRadius:"20px",padding:"4px 12px",fontSize:"13px",color:"#94a3b8",fontWeight:"600"}},results.length+" SPA"+(results.length!==1?"s":"")));
+  hdg.appendChild(tx(' for "'+S.searchQ+'"',{fontSize:"14px",color:"#94a3b8",fontWeight:"500"}));
   wrap.appendChild(hdg);
 
   results.forEach(({spa,matched})=>{
@@ -671,8 +679,8 @@ function renderSearch(){
 
     // header row
     const hrow=h("div",{class:"flex gap10 mb10",style:{alignItems:"center",flexWrap:"wrap"}});
-    hrow.appendChild(h("div",{class:"syne",style:{fontSize:"14px",fontWeight:"700",color:"#dde3f0"}},spa.vendor));
-    hrow.appendChild(tx("· "+spa.spaNumber,{fontSize:"11px",color:"#4a5568"}));
+    hrow.appendChild(h("div",{class:"syne",style:{fontSize:"17px",fontWeight:"700",color:"#dde3f0"}},spa.vendor));
+    hrow.appendChild(tx("· "+spa.spaNumber,{fontSize:"13px",color:"#94a3b8",fontWeight:"500"}));
     hrow.appendChild(pill(spa.endUser,color));
     hrow.appendChild(badge(s.label,s.color,s.bg));
     const days=daysUntil(spa.expiration);
@@ -683,7 +691,7 @@ function renderSearch(){
     const m=S.margins[spa.endUser]??15;
     matched.forEach(item=>{
       const cost=item.listPrice*item.qty*(1-spa.discount/100);
-      const irow=h("div",{style:{background:"rgba(0,0,0,.2)",borderRadius:"5px",padding:"9px 12px",marginBottom:"6px"}});
+      const irow=h("div",{style:{background:"rgba(0,0,0,.2)",borderRadius:"6px",padding:"12px 16px",marginBottom:"8px"}});
       const it=h("div",{class:"flex gap10 mb4",style:{alignItems:"center",flexWrap:"wrap"}});
 
       // highlight matching part
@@ -691,32 +699,32 @@ function renderSearch(){
       const q=S.searchQ.toLowerCase();
       const idx=pn.toLowerCase().indexOf(q);
       if(idx>=0){
-        const pnEl=h("span",{style:{fontSize:"12px",fontWeight:"600",color:"#8ba9d4"}});
+        const pnEl=h("span",{style:{fontSize:"14px",fontWeight:"700",color:"#8ba9d4"}});
         pnEl.appendChild(document.createTextNode(pn.substring(0,idx)));
         pnEl.appendChild(h("mark",{style:{background:"rgba(251,191,36,.25)",color:"#fbbf24",borderRadius:"2px",padding:"0 2px"}},pn.substring(idx,idx+q.length)));
         pnEl.appendChild(document.createTextNode(pn.substring(idx+q.length)));
         it.appendChild(pnEl);
       } else {
-        it.appendChild(tx(pn,{fontSize:"12px",fontWeight:"600",color:"#8ba9d4"}));
+        it.appendChild(tx(pn,{fontSize:"14px",fontWeight:"700",color:"#8ba9d4"}));
       }
-      it.appendChild(tx(item.description,{fontSize:"11px",color:"#4a5568",flex:"1"}));
+      it.appendChild(tx(item.description,{fontSize:"13px",color:"#94a3b8",flex:"1"}));
       irow.appendChild(it);
 
-      const pr=h("div",{class:"flex gap12",style:{fontSize:"11px",flexWrap:"wrap"}});
-      pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+(item.uom||"EA"),{color:"#4a5568"}));
-      pr.appendChild(tx("Qty: "+item.qty+" "+(item.uom||"EA"),{color:"#4a5568"}));
-      pr.appendChild(tx("Disc: "+spa.discount+"%",{color:"#4f8ef7"}));
-      pr.appendChild(tx("SPA: "+fmtMoney(item.listPrice*(1-spa.discount/100))+"/"+(item.uom||"EA"),{color:"#4ade80"}));
-      pr.appendChild(tx("Total: "+fmtMoney(item.listPrice*(1-spa.discount/100)*item.qty),{color:"#8ba9d4"}));
+      const pr=h("div",{class:"flex gap12",style:{fontSize:"13px",flexWrap:"wrap",marginTop:"4px"}});
+      pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+(item.uom||"EA"),{color:"#94a3b8",fontWeight:"500"}));
+      pr.appendChild(tx("Qty: "+item.qty+" "+(item.uom||"EA"),{color:"#94a3b8",fontWeight:"500"}));
+      pr.appendChild(tx("Disc: "+spa.discount+"%",{color:"#4f8ef7",fontWeight:"600"}));
+      pr.appendChild(tx("SPA: "+fmtSPA(item.listPrice*(1-spa.discount/100))+"/"+(item.uom||"EA"),{color:"#4ade80"}));
+      pr.appendChild(tx("Total: "+fmtMoney(item.listPrice*(1-spa.discount/100)*item.qty),{color:"#dde3f0",fontWeight:"600"}));
       irow.appendChild(pr);
       card.appendChild(irow);
     });
 
     if(matched.length<spa.items.length){
-      card.appendChild(tx((spa.items.length-matched.length)+" other item"+(spa.items.length-matched.length!==1?"s":"")+" in this SPA",{fontSize:"10px",color:"#2a3a52",display:"block",marginTop:"4px"}));
+      card.appendChild(tx((spa.items.length-matched.length)+" other item"+(spa.items.length-matched.length!==1?"s":"")+" in this SPA",{fontSize:"12px",color:"#64748b",display:"block",marginTop:"4px"}));
     }
 
-    const viewBtn=btn("View SPA →","btn btn-ghost btn-sm",()=>{set({selSPA:spa,view:"spas",searchQ:""});});
+    const viewBtn=btn("View SPA →","btn btn-ghost",()=>{set({selSPA:spa,view:"spas",searchQ:""});});
     viewBtn.style.marginTop="8px";
     card.appendChild(viewBtn);
     wrap.appendChild(card);
@@ -954,7 +962,7 @@ function renderSPAs(allEUs){
       const pr=h("div",{class:"flex gap8",style:{fontSize:"10px",flexWrap:"wrap"}});
       pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+uom,{color:"#4a5568"}));
       pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#4a5568"}));
-      pr.appendChild(tx("SPA: "+fmtMoney(spaUnit)+"/"+uom,{color:"#4ade80"}));
+      pr.appendChild(tx("SPA: "+fmtSPA(spaUnit)+"/"+uom,{color:"#4ade80"}));
       pr.appendChild(tx("Total: "+fmtMoney(spaUnit*item.qty),{color:"#8ba9d4"}));
       ic.appendChild(pr);panel.appendChild(ic);
     });
@@ -1055,7 +1063,7 @@ function renderContract(allEUs){
       row.appendChild(tx(item.partNumber,{color:"#4a5568",fontSize:"10px"}));
       row.appendChild(tx(String(item.qty)));
       row.appendChild(tx(fmtMoney(list),{color:"#4a5568"}));
-      row.appendChild(tx(fmtMoney(cost),{color:"#4ade80"}));
+      row.appendChild(tx(fmtSPA(cost),{color:"#4ade80"}));
       row.appendChild(tx(fmtMoney(cont),{color:euCol(spa.endUser,allEUs),fontWeight:"600"}));
       li.appendChild(row);
     });
