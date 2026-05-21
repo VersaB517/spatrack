@@ -126,6 +126,10 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 /* SEARCH RESULTS */
 .search-result-tag{background:#131b28;border:1px solid #1e2d42;border-radius:4px;padding:2px 7px;font-size:10px;color:#8ba9d4;display:inline-block;margin:2px;}
 .search-hit{border-left:3px solid;border-radius:8px;padding:16px 20px;margin-bottom:12px;}
+.vtab{display:inline-block;padding:5px 13px;border-radius:20px;cursor:pointer;font-size:12px;border:1px solid #1e2d42;white-space:nowrap;color:#64748b;transition:all .15s;font-weight:500;background:#0a0f1c;margin:0 3px 6px 0;}
+.vtab:hover{color:#94a3b8;border-color:#2a3a52;}
+.vtab.vactive{background:rgba(79,142,247,.12);color:#4f8ef7;border-color:rgba(79,142,247,.35);font-weight:600;}
+#vendortabs{display:flex;flex-wrap:wrap;padding-bottom:10px;}
 
 /* ANIMATIONS */
 .fadein{animation:fi .2s ease;}
@@ -172,9 +176,9 @@ function calcStatus(d,cur)   { if(cur==="renewal"||cur==="submitted") return cur
 function fmtDate(d)      { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
 function fmtMoney(v)     { return "$"+Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtSPA(v)       {
-  // Show 4 decimal places for SPA prices — removes trailing zeros but keeps at least 2
+  // Show up to 5 decimal places — removes trailing zeros but keeps at least 2
   const n=Number(v||0);
-  const s=n.toFixed(4);
+  const s=n.toFixed(5);
   // Remove trailing zeros after decimal but keep at least 2 places
   const trimmed=s.replace(/(\.[0-9]*[1-9])0+$|(\.00)$/, (m,p1,p2)=>p1||p2||".00");
   return "$"+trimmed;
@@ -182,7 +186,8 @@ function fmtSPA(v)       {
 function euCol(n,a)      { const e=a.find(x=>x.name===n); return e?e.color:"#4a5568"; }
 function buildEUs(spas,margins) {
   const names=[...new Set([...spas.map(s=>s.endUser),...Object.keys(margins)])];
-  return names.map((name,i)=>({name,color:EU_COLORS[i%EU_COLORS.length]}));
+  const sorted=[...names].sort((a,b)=>a.localeCompare(b));
+  return sorted.map((name,i)=>({name,color:EU_COLORS[i%EU_COLORS.length]}));
 }
 function blankSPA()  { return {vendor:"",endUser:"",spaNumber:"",discount:"",expiration:"",category:"",items:[],docUrl:"",_ni:blankItem()}; }
 function blankItem() { return {partNumber:"",description:"",listPrice:"",qty:"",uom:"EA"}; }
@@ -206,6 +211,7 @@ let S = {
   filterSt:"all", sortBy:"expiration",
   searchQ:"",
   showAdd:false, showEdit:false, showAddEU:false, showEditEU:false, showDeleteEU:false, showClear:false, showApiKey:false, showImport:false,
+  activeVendor:'all',
   newEU:"", editEUName:"", editEUOld:"", deleteEUName:"", editSPA:null, newSPA:blankSPA(),
   apiKey:loadKey(),
   imp:{step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null},
@@ -353,6 +359,7 @@ async function doExtract() {
 }
 
 CRITICAL PRICING RULES — read carefully:
+- If the document only shows ONE price per item (no separate list price), set listPrice to 0. Only set listPrice if there is a clearly separate list/standard/retail price shown alongside the SPA price.
 - listPrice must ALWAYS be the price per single unit (per 1 FT, per 1 EA, etc.)
 - If pricing is shown as per 1000 FT (e.g. "262.00/1000 FT" or "0.6316 per 1000 FT" or price column says "PRICE PER UOM" with UOM=1000): divide by 1000 to get per-FT price. Example: 262.00/1000FT = 0.262/FT
 - If pricing is shown as "/MF" or "per MF" or "per M feet": divide by 1000. Example: $504.00/MF = $0.504/FT
@@ -418,7 +425,7 @@ CRITICAL PRICING RULES — read carefully:
     const extractedEU = ex.endUser||"";
     const allEUNames = Object.keys(S.margins);
     const matchedEU = allEUNames.find(n=>n.toLowerCase()===extractedEU.toLowerCase()) || "";
-    S.imp.review={vendor:ex.vendor||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
+    S.imp.review={vendor:ex.vendor||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,listUnknown:!parseFloat(i.listPrice),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
     S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
@@ -711,7 +718,7 @@ function renderSearch(){
       irow.appendChild(it);
 
       const pr=h("div",{class:"flex gap12",style:{fontSize:"13px",flexWrap:"wrap",marginTop:"4px"}});
-      pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+(item.uom||"EA"),{color:"#94a3b8",fontWeight:"500"}));
+      pr.appendChild(tx("List: "+(item.listUnknown?"N/A":fmtMoney(item.listPrice)+"/"+(item.uom||"EA")),{color:"#94a3b8",fontWeight:"500"}));
       pr.appendChild(tx("Qty: "+item.qty+" "+(item.uom||"EA"),{color:"#94a3b8",fontWeight:"500"}));
       pr.appendChild(tx("Disc: "+spa.discount+"%",{color:"#4f8ef7",fontWeight:"600"}));
       pr.appendChild(tx("SPA: "+fmtSPA(item.listPrice*(1-spa.discount/100))+"/"+(item.uom||"EA"),{color:"#4ade80"}));
@@ -796,10 +803,10 @@ function renderDashboard(allEUs){
       db.appendChild(h("div",{style:{fontSize:"9px",color:s.color+"88",letterSpacing:".07em"}},days<0?"DAYS AGO":"DAYS LEFT"));
       row.appendChild(db);
       const info=h("div",{style:{flex:"1"}});
-      const tit=h("div",{style:{fontSize:"12px",fontWeight:"500",marginBottom:"2px"}});
-      tit.appendChild(document.createTextNode(spa.vendor+" "));tit.appendChild(tx("· "+spa.spaNumber,{color:"#4a5568",fontSize:"10px"}));
+      const tit=h("div",{style:{fontSize:"14px",fontWeight:"700",marginBottom:"4px"}});
+      tit.appendChild(document.createTextNode(spa.vendor+" "));tit.appendChild(tx("· "+spa.spaNumber,{color:"#94a3b8",fontSize:"13px",fontWeight:"500"}));
       info.appendChild(tit);
-      info.appendChild(tx("Expires "+fmtDate(spa.expiration)+" · "+spa.category,{fontSize:"10px",color:"#4a5568"}));
+      info.appendChild(tx("Expires "+fmtDate(spa.expiration)+" · "+spa.category,{fontSize:"13px",color:"#94a3b8",fontWeight:"500"}));
       row.appendChild(info);
       row.appendChild(pill(spa.endUser,euCol(spa.endUser,allEUs)));
       row.appendChild(tx("→",{color:s.color,fontSize:"11px"}));
@@ -833,6 +840,7 @@ function renderDashboard(allEUs){
 function renderSPAs(allEUs){
   const visible=getSrc().filter(spa=>{
     if(S.filterSt!=="all"&&spa.status!==S.filterSt)return false;
+    if(S.activeVendor!=="all"&&spa.vendor!==S.activeVendor)return false;
     return true;
   }).sort((a,b)=>{
     if(S.sortBy==="expiration")return new Date(a.expiration)-new Date(b.expiration);
@@ -849,6 +857,25 @@ function renderSPAs(allEUs){
   tb.appendChild(mkSel([["all","All Status"],["active","Active"],["expiring","Expiring"],["expired","Expired"]],S.filterSt,v=>set({filterSt:v})));
   tb.appendChild(mkSel([["expiration","Sort: Expiration"],["vendor","Sort: Vendor"],["discount","Sort: Discount"],...(S.activeEU==="all"?[["account","Sort: Account"]]:[])] ,S.sortBy,v=>set({sortBy:v})));
   left.appendChild(tb);
+
+  // Vendor tab bar
+  const allSrc=getSrc();
+  const vCounts={};
+  allSrc.forEach(s=>{vCounts[s.vendor]=(vCounts[s.vendor]||0)+1;});
+  const vList=Object.entries(vCounts).sort((a,b)=>b[1]-a[1]);
+  if(vList.length>1){
+    const vtDiv=h("div",{id:"vendortabs"});
+    const allVT=h("div",{class:"vtab"+(S.activeVendor==="all"?" vactive":"")},"All Vendors");
+    allVT.addEventListener("click",()=>set({activeVendor:"all"}));
+    vtDiv.appendChild(allVT);
+    vList.forEach(([v,cnt])=>{
+      const vt=h("div",{class:"vtab"+(S.activeVendor===v?" vactive":"")},v+" ("+cnt+")");
+      vt.addEventListener("click",()=>set({activeVendor:v}));
+      vtDiv.appendChild(vt);
+    });
+    left.appendChild(vtDiv);
+  }
+
   const tw=h("div",{class:"tbl-wrap"});
   const hdr=h("div",{class:"tbl-hdr",style:{gridTemplateColumns:cols}});
   ["Vendor / SPA #",...(S.activeEU==="all"?["Account"]:[]),"Category","Disc%","Expires","Status",""].forEach(c=>hdr.appendChild(h("div",{},c)));
@@ -878,8 +905,15 @@ function renderSPAs(allEUs){
       statusCell.appendChild(reqBtn);
     }
     row.appendChild(statusCell);
+    const aCell=h("div",{style:{display:"flex",flexDirection:"column",gap:"4px",alignItems:"flex-end"}});
+    if(spa.status==="expired"||spa.status==="expiring"){
+      const rBtn=h("button",{style:{border:"1px solid rgba(99,102,241,.4)",borderRadius:"3px",padding:"2px 7px",fontSize:"10px",cursor:"pointer",fontWeight:"600",background:"rgba(99,102,241,.1)",color:"#818cf8",whiteSpace:"nowrap",marginBottom:"2px"}},"Renew");
+      rBtn.addEventListener("click",e=>{e.stopPropagation();S._replacingSPA=spa;S.imp={step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null};set({showImport:true});});
+      aCell.appendChild(rBtn);
+    }
     const db=btn("✕","btn btn-ghost btn-sm",e=>{e.stopPropagation();doDelete(spa.id);});
-    row.appendChild(h("div",{style:{textAlign:"right"}},db));
+    aCell.appendChild(db);
+    row.appendChild(aCell);
     tw.appendChild(row);
   });
   left.appendChild(tw);wrap.appendChild(left);
@@ -960,7 +994,7 @@ function renderSPAs(allEUs){
       ic.appendChild(tx(item.partNumber,{fontSize:"10px",color:"#8ba9d4",fontWeight:"600",display:"block"}));
       ic.appendChild(tx(item.description,{fontSize:"10px",color:"#4a5568",display:"block",marginTop:"1px",marginBottom:"5px"}));
       const pr=h("div",{class:"flex gap8",style:{fontSize:"10px",flexWrap:"wrap"}});
-      pr.appendChild(tx("List: "+fmtMoney(item.listPrice)+"/"+uom,{color:"#4a5568"}));
+      pr.appendChild(tx("List: "+(item.listUnknown?"N/A":fmtMoney(item.listPrice)+"/"+uom),{color:"#4a5568"}));
       pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#4a5568"}));
       pr.appendChild(tx("SPA: "+fmtSPA(spaUnit)+"/"+uom,{color:"#4ade80"}));
       pr.appendChild(tx("Total: "+fmtMoney(spaUnit*item.qty),{color:"#8ba9d4"}));
