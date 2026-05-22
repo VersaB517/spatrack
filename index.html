@@ -73,13 +73,13 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .btn-sm{padding:3px 8px;font-size:10px;}
 
 /* INPUTS */
-.inp{background:#09111a;color:#dde3f0;border:1px solid #1e2d42;border-radius:5px;padding:7px 10px;font-family:'DM Sans',sans-serif;font-size:12px;outline:none;width:100%;}
+.inp{background:#09111a;color:#dde3f0;border:1px solid #1e2d42;border-radius:5px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;outline:none;width:100%;}
 .inp:focus{border-color:#4f8ef7;}
 .inp.ai-filled{border-color:#5b21b6;background:rgba(91,33,182,.08);}
 
 /* TABLE */
 .tbl-wrap{border:1px solid #131b28;border-radius:8px;overflow:hidden;}
-.tbl-hdr{background:#0a1020;padding:9px 14px;display:grid;font-size:11px;color:#94a3b8;letter-spacing:.06em;text-transform:uppercase;font-weight:600;}
+.tbl-hdr{background:#0a1020;padding:10px 14px;display:grid;font-size:12px;color:#cbd5e1;letter-spacing:.05em;text-transform:uppercase;font-weight:700;}
 .tbl-row{padding:10px 14px;display:grid;border-top:1px solid #0d1520;align-items:center;cursor:pointer;transition:background .1s;}
 .tbl-row:nth-child(odd){background:#0d1117;}
 .tbl-row:nth-child(even){background:#09111a;}
@@ -163,7 +163,7 @@ async function apiDel(p)      { const r=await fetch(p,{method:"DELETE"}); if(!r.
 
 async function loadAll() {
   const [raw, margins] = await Promise.all([apiGet("/api/spas"), apiGet("/api/margins")]);
-  const spas = raw.map(r=>({id:r.id,vendor:r.vendor,endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],docUrl:r.doc_url||"",renewalRequested:r.renewal_requested||false,status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
+  const spas = raw.map(r=>({id:r.id,vendor:normalizeVendor(r.vendor),endUser:r.end_user,spaNumber:r.spa_number,discount:r.discount,expiration:r.expiration,category:r.category,items:r.items||[],docUrl:r.doc_url||"",renewalRequested:r.renewal_requested||false,status:calcStatus(r.expiration,r.renewal_status),renewalStatus:r.renewal_status||""}));
   return {spas,margins};
 }
 
@@ -174,6 +174,17 @@ const TODAY = new Date(); TODAY.setHours(0,0,0,0);
 function daysUntil(d)    { return Math.ceil((new Date(d)-TODAY)/86400000); }
 function calcStatus(d,cur)   { if(cur==="renewal"||cur==="submitted") return cur; const n=daysUntil(d); return n<0?"expired":n<=EXPIRING_DAYS?"expiring":"active"; }
 function fmtDate(d)      { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
+function normalizeVendor(v) {
+  if(!v) return v;
+  const lower=v.toLowerCase();
+  if(lower.includes("corning")) return "Corning";
+  if(lower.includes("commscope")||lower.includes("comm scope")) return "CommScope";
+  if(lower.includes("legrand")) return "Legrand";
+  if(lower.includes("superior essex")) return "Superior Essex";
+  if(lower.includes("schneider")) return "Schneider Electric";
+  if(lower.includes("chatsworth")) return "Chatsworth Products";
+  return v;
+}
 function fmtMoney(v)     { return "$"+Number(v||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtSPA(v)       {
   // Show up to 5 decimal places — removes trailing zeros but keeps at least 2
@@ -226,7 +237,7 @@ function toast(msg,type="ok",ms=3000){ S.toast={msg,type};render();setTimeout(()
 // ═══════════════════════════════════════════
 async function doAddSPA(spa) {
   try {
-    const row=await apiPost("/api/spas",{vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
+    const row=await apiPost("/api/spas",{vendor:normalizeVendor(spa.vendor)||spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
     const ns={id:row.id,vendor:row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],status:calcStatus(row.expiration)};
     S.spas=[...S.spas,ns];
     if(S.margins[spa.endUser]===undefined){await apiPost("/api/margins",{end_user:spa.endUser,margin:15});S.margins[spa.endUser]=15;}
@@ -239,7 +250,7 @@ async function doAddSPA(spa) {
 async function doEditSPA() {
   try {
     const spa=S.editSPA;
-    const row=await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
+    const row=await apiPut("/api/spas",{id:spa.id,vendor:normalizeVendor(spa.vendor)||spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
     const us={id:row.id,vendor:row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],status:calcStatus(row.expiration)};
     S.spas=S.spas.map(s=>s.id===us.id?us:s);
     S.selSPA=us;S.showEdit=false;S.editSPA=null;
@@ -425,7 +436,7 @@ CRITICAL PRICING RULES — read carefully:
     const extractedEU = ex.endUser||"";
     const allEUNames = Object.keys(S.margins);
     const matchedEU = allEUNames.find(n=>n.toLowerCase()===extractedEU.toLowerCase()) || "";
-    S.imp.review={vendor:ex.vendor||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,listUnknown:!parseFloat(i.listPrice),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
+    S.imp.review={vendor:normalizeVendor(ex.vendor)||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,listUnknown:!parseFloat(i.listPrice),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
     S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
@@ -853,7 +864,7 @@ function renderSPAs(allEUs){
   const wrap=h("div",{class:"fadein",style:{display:"grid",gridTemplateColumns:S.selSPA?"1fr 340px":"1fr",gap:"16px"}});
   const left=h("div");
   const tb=h("div",{class:"flex gap8 mb12",style:{alignItems:"center",flexWrap:"wrap"}});
-  tb.appendChild(h("h2",{class:"syne",style:{fontSize:"18px",fontWeight:"700",color:"#dde3f0",flex:"1"}},S.activeEU==="all"?"All SPAs":S.activeEU));
+  tb.appendChild(h("h2",{class:"syne",style:{fontSize:"24px",fontWeight:"800",color:"#f1f5f9",flex:"1",letterSpacing:"-.01em"}},S.activeEU==="all"?"All SPAs":S.activeEU));
   tb.appendChild(mkSel([["all","All Status"],["active","Active"],["expiring","Expiring"],["expired","Expired"]],S.filterSt,v=>set({filterSt:v})));
   tb.appendChild(mkSel([["expiration","Sort: Expiration"],["vendor","Sort: Vendor"],["discount","Sort: Discount"],...(S.activeEU==="all"?[["account","Sort: Account"]]:[])] ,S.sortBy,v=>set({sortBy:v})));
   left.appendChild(tb);
@@ -886,8 +897,8 @@ function renderSPAs(allEUs){
     const row=h("div",{class:"tbl-row"+(isSel?" sel":""),style:{gridTemplateColumns:cols}});
     row.addEventListener("click",()=>set({selSPA:isSel?null:spa}));
     const vc=h("div");
-    vc.appendChild(tx(spa.vendor,{fontWeight:"600",fontSize:"12px",display:"block"}));
-    vc.appendChild(tx(spa.spaNumber,{fontSize:"10px",color:"#4a5568",display:"block",marginTop:"2px"}));
+    vc.appendChild(tx(spa.vendor,{fontWeight:"700",fontSize:"14px",display:"block",color:"#f1f5f9"}));
+    vc.appendChild(tx(spa.spaNumber,{fontSize:"12px",color:"#64748b",display:"block",marginTop:"3px"}));
     row.appendChild(vc);
     if(S.activeEU==="all")row.appendChild(h("div",{},pill(spa.endUser,euCol(spa.endUser,allEUs))));
     row.appendChild(tx(spa.category,{fontSize:"12px",color:"#94a3b8"}));
@@ -1060,7 +1071,7 @@ function renderContract(allEUs){
     const sc=lt*(1-spa.discount/100),ct=sc*(1+m/100);
     const row=h("div",{style:{display:"grid",gridTemplateColumns:cols,padding:"10px 16px",background:ri++%2===0?"#0d1117":"#09111a",borderTop:"1px solid #0d1520",alignItems:"center"}});
     const vc=h("div");
-    vc.appendChild(tx(spa.vendor,{fontWeight:"600",fontSize:"12px",display:"block"}));
+    vc.appendChild(tx(spa.vendor,{fontWeight:"700",fontSize:"14px",display:"block",color:"#f1f5f9"}));
     vc.appendChild(tx(spa.items.length+" items",{fontSize:"9px",color:"#2a3a52",display:"block",marginTop:"1px"}));
     row.appendChild(vc);
     if(S.activeEU==="all")row.appendChild(h("div",{},pill(spa.endUser,euCol(spa.endUser,allEUs))));
