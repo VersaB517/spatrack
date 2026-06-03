@@ -130,6 +130,16 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .vtab:hover{color:#e2e8f0;border-color:#4f8ef7;background:#131f35;}
 .vtab.vactive{background:rgba(79,142,247,.18);color:#e2e8f0;border-color:#4f8ef7;font-weight:700;box-shadow:0 0 0 1px rgba(79,142,247,.3);}
 #vendortabs{display:flex;flex-wrap:wrap;padding-bottom:12px;}
+.view-toggle{display:flex;gap:0;border:1px solid #1e2d42;border-radius:6px;overflow:hidden;}
+.view-toggle-btn{padding:5px 10px;font-size:11px;font-family:'DM Sans',sans-serif;font-weight:600;cursor:pointer;border:none;background:#09111a;color:#4a5568;transition:all .15s;}
+.view-toggle-btn:hover{color:#94a3b8;}
+.view-toggle-btn.active{background:#1d4ed8;color:#fff;}
+.tbl-hdr{position:sticky;top:0;z-index:10;}
+.tbl-row.compact{padding:5px 14px;}
+.tip{position:relative;}
+.tip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e2d42;color:#e2e8f0;font-size:11px;font-weight:500;padding:4px 8px;border-radius:5px;white-space:nowrap;pointer-events:none;z-index:999;border:1px solid #2a3a52;}
+.tip:hover::before{content:"";position:absolute;bottom:calc(100% + 1px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e2d42;pointer-events:none;z-index:999;}
+.action-cell{display:flex;flex-direction:column;gap:5px;align-items:flex-end;}
 
 /* ANIMATIONS */
 .fadein{animation:fi .2s ease;}
@@ -171,8 +181,8 @@ async function loadAll() {
 //  HELPERS
 // ═══════════════════════════════════════════
 const TODAY = new Date(); TODAY.setHours(0,0,0,0);
-function daysUntil(d)    { return Math.ceil((new Date(d)-TODAY)/86400000); }
-function calcStatus(d,cur)   { if(cur==="renewal"||cur==="submitted") return cur; const n=daysUntil(d); return n<0?"expired":n<=EXPIRING_DAYS?"expiring":"active"; }
+function daysUntil(d) { const exp=new Date(d); exp.setHours(0,0,0,0); return Math.round((exp-TODAY)/86400000); }
+function calcStatus(d,cur) { if(cur==="renewal"||cur==="submitted") return cur; const n=daysUntil(d); if(n<0)return "expired"; if(n===0)return "today"; if(n<=EXPIRING_DAYS)return "expiring"; return "active"; }
 function fmtDate(d)      { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
 function normalizeVendor(v) {
   if(!v) return v;
@@ -208,6 +218,7 @@ function saveKey(k)  { try{localStorage.setItem(APIKEY_KEY,k);}catch(e){} }
 const ST = {
   active:   {color:"#4ade80",bg:"#052010",label:"Active"},
   expiring: {color:"#fbbf24",bg:"#1c1200",label:"Expiring Soon"},
+  today:    {color:"#fb923c",bg:"#1f0d00",label:"Expires Today"},
   expired:  {color:"#f87171",bg:"#1a0505",label:"Expired"},
   renewal:  {color:"#818cf8",bg:"#0f0a2a",label:"Renewal In Progress"},
   submitted:{color:"#22d3ee",bg:"#061a1f",label:"Renewal Submitted"},
@@ -223,6 +234,8 @@ let S = {
   searchQ:"",
   showAdd:false, showEdit:false, showAddEU:false, showEditEU:false, showDeleteEU:false, showClear:false, showApiKey:false, showImport:false,
   activeVendor:'all',
+  compactView:false,
+  showDeleteConfirm:false, _deletingId:null, _deletingName:'',
   newEU:"", editEUName:"", editEUOld:"", deleteEUName:"", editSPA:null, newSPA:blankSPA(),
   apiKey:loadKey(),
   imp:{step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null},
@@ -760,6 +773,55 @@ function renderDashboard(allEUs){
   const stats={total:src.length,active:src.filter(s=>s.status==="active").length,expiring:src.filter(s=>s.status==="expiring").length,expired:src.filter(s=>s.status==="expired").length};
   const wrap=h("div",{class:"fadein"});
 
+  // TODAY'S PRIORITIES
+  const expiredSPAs  = src.filter(s=>s.status==="expired");
+  const todaySPAs    = src.filter(s=>s.status==="today");
+  const expiringSPAs = src.filter(s=>s.status==="expiring");
+  const needFollowUp = src.filter(s=>(s.status==="expired"||s.status==="expiring"||s.status==="today")&&!s.renewalRequested);
+  const inProgress   = src.filter(s=>s.renewalRequested);
+  const totalUrgent  = expiredSPAs.length+todaySPAs.length+expiringSPAs.length;
+  if(totalUrgent>0||inProgress.length>0){
+    const pc=h("div",{style:{background:"linear-gradient(135deg,#0f1a2e,#0d1117)",border:"1px solid #1e2d42",borderRadius:"10px",padding:"18px 22px",marginBottom:"20px"}});
+    const ph=h("div",{class:"flex gap10 mb14",style:{alignItems:"center"}});
+    ph.appendChild(h("div",{class:"syne",style:{fontSize:"16px",fontWeight:"800",color:"#f1f5f9"}},"Today's Priorities"));
+    if(totalUrgent>0) ph.appendChild(h("span",{style:{background:"#7c1d1d",borderRadius:"20px",padding:"3px 10px",fontSize:"11px",color:"#fca5a5",fontWeight:"600"}},totalUrgent+" need attention"));
+    pc.appendChild(ph);
+    const pgrid=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}});
+    const prows=[];
+    if(expiredSPAs.length>0)   prows.push({icon:"",label:expiredSPAs.length+" SPA"+(expiredSPAs.length!==1?"s":"")+" expired",sub:"Pricing no longer valid",btn:"Review Expired",color:"#f87171",fn:()=>set({view:"spas",filterSt:"expired",searchQ:""})});
+    if(todaySPAs.length>0)     prows.push({icon:"",label:todaySPAs.length+" expire today",sub:"Act now before pricing is lost",btn:"View Expiring Today",color:"#fb923c",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:""})});
+    if(expiringSPAs.length>0)  prows.push({icon:"",label:expiringSPAs.length+" expiring within 14 days",sub:"Renew before pricing expires",btn:"View Expiring",color:"#fbbf24",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:""})});
+    if(needFollowUp.length>0)  prows.push({icon:"",label:needFollowUp.length+" need vendor follow-up",sub:"No renewal request sent yet",btn:"Open Follow-Up List",color:"#818cf8",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:""})});
+    if(inProgress.length>0)    prows.push({icon:"",label:inProgress.length+" renewal request"+(inProgress.length!==1?"s":"")+" sent",sub:"Waiting on vendor response",btn:"View In Progress",color:"#22d3ee",fn:()=>set({view:"spas",filterSt:"all",searchQ:""})});
+    prows.forEach(pr=>{
+      const card=h("div",{style:{background:"rgba(0,0,0,.25)",borderRadius:"7px",padding:"12px 14px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",borderLeft:"3px solid "+pr.color,transition:"background .15s"}});
+      card.addEventListener("mouseenter",()=>card.style.background="rgba(255,255,255,.04)");
+      card.addEventListener("mouseleave",()=>card.style.background="rgba(0,0,0,.25)");
+      card.addEventListener("click",pr.fn);
+      const info=h("div",{style:{flex:"1"}});
+      info.appendChild(h("div",{style:{fontSize:"13px",fontWeight:"700",color:"#f1f5f9",marginBottom:"2px"}},pr.label));
+      info.appendChild(h("div",{style:{fontSize:"11px",color:"#64748b"}},pr.sub));
+      card.appendChild(info);
+      const ab=h("button",{style:{background:pr.color+"22",color:pr.color,border:"1px solid "+pr.color+"44",borderRadius:"5px",padding:"5px 10px",fontSize:"11px",fontWeight:"600",cursor:"pointer",whiteSpace:"nowrap",flexShrink:"0",fontFamily:"'DM Sans',sans-serif"}},pr.btn+" →");
+      ab.addEventListener("click",e=>{e.stopPropagation();pr.fn();});
+      card.appendChild(ab);
+      pgrid.appendChild(card);
+    });
+    pc.appendChild(pgrid);
+    const expRow=h("div",{style:{display:"flex",justifyContent:"flex-end"}});
+    const expBtn=h("button",{style:{background:"#131b28",border:"1px solid #2a3a52",borderRadius:"6px",padding:"7px 14px",fontSize:"12px",fontWeight:"600",color:"#94a3b8",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"all .15s"}},"⬇ Export Action List");
+    expBtn.addEventListener("mouseenter",()=>{expBtn.style.color="#e2e8f0";expBtn.style.borderColor="#4f8ef7";});
+    expBtn.addEventListener("mouseleave",()=>{expBtn.style.color="#94a3b8";expBtn.style.borderColor="#2a3a52";});
+    expBtn.addEventListener("click",()=>{
+      const urgent=[...expiredSPAs,...todaySPAs,...expiringSPAs];
+      const lines=["SPAtrack Action List - "+new Date().toLocaleDateString(),"","URGENT SPAS REQUIRING ATTENTION","=".repeat(50),""];
+      urgent.forEach(s=>{const d=daysUntil(s.expiration);lines.push("Vendor: "+s.vendor,"Account: "+s.endUser,"SPA #: "+s.spaNumber,"Status: "+(d<0?"EXPIRED "+Math.abs(d)+"d ago":d===0?"EXPIRES TODAY":"EXPIRING IN "+d+"d"),"Renewal Requested: "+(s.renewalRequested?"Yes":"No"),"-".repeat(40),"");});
+      const blob=new Blob([lines.join("\n")],{type:"text/plain"});
+      const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="SPAtrack-Action-List-"+new Date().toISOString().slice(0,10)+".txt";a.click();
+    });
+    expRow.appendChild(expBtn);pc.appendChild(expRow);
+    wrap.appendChild(pc);
+  }
   // heading
   const hdg=h("div",{class:"flex gap8 mb14",style:{alignItems:"center"}});
   if(S.activeEU!=="all"){hdg.appendChild(dot(euCol(S.activeEU,allEUs),8));}
@@ -866,6 +928,13 @@ function renderSPAs(allEUs){
   const tb=h("div",{class:"flex gap8 mb12",style:{alignItems:"center",flexWrap:"wrap"}});
   tb.appendChild(h("h2",{class:"syne",style:{fontSize:"19px",fontWeight:"700",color:"#f1f5f9",flex:"1",letterSpacing:"-.01em"}},S.activeEU==="all"?"All SPAs":S.activeEU));
   tb.appendChild(mkSel([["all","All Status"],["active","Active"],["expiring","Expiring"],["expired","Expired"]],S.filterSt,v=>set({filterSt:v})));
+  const vtog=h("div",{class:"view-toggle"});
+  const vcb=h("button",{class:"view-toggle-btn"+(S.compactView?" active":"")},"Compact");
+  const vfb=h("button",{class:"view-toggle-btn"+(!S.compactView?" active":"")},"Comfortable");
+  vcb.addEventListener("click",()=>set({compactView:true}));
+  vfb.addEventListener("click",()=>set({compactView:false}));
+  vtog.appendChild(vcb);vtog.appendChild(vfb);
+  tb.appendChild(vtog);
   tb.appendChild(mkSel([["expiration","Sort: Expiration"],["vendor","Sort: Vendor"],["discount","Sort: Discount"],...(S.activeEU==="all"?[["account","Sort: Account"]]:[])] ,S.sortBy,v=>set({sortBy:v})));
   left.appendChild(tb);
 
@@ -894,7 +963,7 @@ function renderSPAs(allEUs){
   if(!visible.length) tw.appendChild(h("div",{style:{padding:"24px",textAlign:"center",color:"#2a3a52",fontSize:"12px"}},"No SPAs match current filters"));
   visible.forEach(spa=>{
     const s=ST[spa.status],days=daysUntil(spa.expiration),isSel=S.selSPA?.id===spa.id;
-    const row=h("div",{class:"tbl-row"+(isSel?" sel":""),style:{gridTemplateColumns:cols}});
+    const row=h("div",{class:"tbl-row"+(isSel?" sel":"")+(S.compactView?" compact":""),style:{gridTemplateColumns:cols}});
     row.addEventListener("click",()=>set({selSPA:isSel?null:spa}));
     const vc=h("div");
     vc.appendChild(tx(spa.vendor,{fontWeight:"700",fontSize:"14px",display:"block",color:"#f1f5f9"}));
@@ -905,7 +974,7 @@ function renderSPAs(allEUs){
     row.appendChild(h("span",{class:"syne",style:{fontSize:"13px",fontWeight:"700",color:"#4f8ef7"}},spa.discount+"%"));
     const dc=h("div");
     dc.appendChild(tx(fmtDate(spa.expiration),{fontSize:"12px",display:"block",color:"#dde3f0"}));
-    dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days+"d left",{fontSize:"11px",color:days<0?"#f87171":days<=EXPIRING_DAYS?"#fbbf24":"#94a3b8",display:"block",marginTop:"2px",fontWeight:"500"}));
+    dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days===0?"Today":days+"d left",{fontSize:"11px",color:days<0?"#f87171":days===0?"#fb923c":days<=EXPIRING_DAYS?"#fbbf24":"#94a3b8",display:"block",marginTop:"2px",fontWeight:"500"}));
     row.appendChild(dc);
     // Status badge + renewal requested button
     const statusCell=h("div",{style:{display:"flex",flexDirection:"column",gap:"4px"}});
@@ -916,13 +985,15 @@ function renderSPAs(allEUs){
       statusCell.appendChild(reqBtn);
     }
     row.appendChild(statusCell);
-    const aCell=h("div",{style:{display:"flex",flexDirection:"column",gap:"4px",alignItems:"flex-end"}});
-    if(spa.status==="expired"||spa.status==="expiring"){
+    const aCell=h("div",{class:"action-cell"});
+    if(spa.status==="expired"||spa.status==="expiring"||spa.status==="today"){
       const rBtn=h("button",{style:{border:"1px solid rgba(99,102,241,.4)",borderRadius:"3px",padding:"2px 7px",fontSize:"10px",cursor:"pointer",fontWeight:"600",background:"rgba(99,102,241,.1)",color:"#818cf8",whiteSpace:"nowrap",marginBottom:"2px"}},"Renew");
       rBtn.addEventListener("click",e=>{e.stopPropagation();S._replacingSPA=spa;S.imp={step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null};set({showImport:true});});
       aCell.appendChild(rBtn);
     }
-    const db=btn("✕","btn btn-ghost btn-sm",e=>{e.stopPropagation();doDelete(spa.id);});
+    const db=h("button",{class:"btn btn-ghost btn-sm tip","data-tip":"Delete this SPA permanently"},"✕");
+    db.style.cssText="padding:3px 8px;font-size:11px;";
+    db.addEventListener("click",e=>{e.stopPropagation();S._deletingId=spa.id;S._deletingName=spa.vendor+" · "+spa.spaNumber;set({showDeleteConfirm:true});});
     aCell.appendChild(db);
     row.appendChild(aCell);
     tw.appendChild(row);
@@ -1306,6 +1377,19 @@ function render(){
     br.appendChild(btn("Cancel","btn btn-ghost",()=>set({showDeleteEU:false})));
     const db=btn("Yes, Delete Account","btn btn-danger",doDeleteEU);db.style.flex="2";br.appendChild(db);
     box.appendChild(br);bd.appendChild(box);app.appendChild(bd);
+  }
+
+  if(S.showDeleteConfirm){
+    const bd=h("div",{class:"modal-backdrop"});
+    const box=h("div",{class:"modal-box sm fadein"});
+    box.appendChild(h("div",{class:"syne mb10",style:{fontSize:"15px",fontWeight:"700",color:"#f87171"}},"Delete SPA?"));
+    box.appendChild(h("div",{style:{fontSize:"13px",color:"#94a3b8",marginBottom:"6px"}},S._deletingName));
+    box.appendChild(h("div",{style:{fontSize:"12px",color:"#64748b",marginBottom:"18px"}},"This will permanently remove this SPA and all its line items. This cannot be undone."));
+    const br=h("div",{class:"flex gap8"});
+    br.appendChild(btn("Cancel","btn btn-ghost",()=>set({showDeleteConfirm:false,_deletingId:null,_deletingName:""})));
+    const db2=btn("Yes, Delete SPA","btn",()=>{doDelete(S._deletingId);set({showDeleteConfirm:false,_deletingId:null,_deletingName:""},false);});
+    db2.style.cssText="background:#7f1d1d;color:#fca5a5;flex:2";
+    br.appendChild(db2);box.appendChild(br);bd.appendChild(box);app.appendChild(bd);
   }
 
   if(S.toast) app.appendChild(h("div",{class:"toast "+S.toast.type},S.toast.msg));
