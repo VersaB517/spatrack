@@ -808,11 +808,11 @@ function renderDashboard(allEUs){
     pc.appendChild(ph);
     const pgrid=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}});
     const prows=[];
-    if(expiredSPAs.length>0)   prows.push({icon:"",label:expiredSPAs.length+" SPA"+(expiredSPAs.length!==1?"s":"")+" expired",sub:"Pricing no longer valid",btn:"Review Expired",color:"#f87171",fn:()=>set({view:"spas",filterSt:"expired",searchQ:""})});
-    if(todaySPAs.length>0)     prows.push({icon:"",label:todaySPAs.length+" expire today",sub:"Act now before pricing is lost",btn:"View Expiring Today",color:"#fb923c",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:""})});
-    if(expiringSPAs.length>0)  prows.push({icon:"",label:expiringSPAs.length+" expiring within 14 days",sub:"Renew before pricing expires",btn:"View Expiring",color:"#fbbf24",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:""})});
-    if(needFollowUp.length>0)  prows.push({icon:"",label:needFollowUp.length+" need vendor follow-up",sub:"No renewal request sent yet",btn:"Open Follow-Up List",color:"#818cf8",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:""})});
-    if(inProgress.length>0)    prows.push({icon:"",label:inProgress.length+" renewal request"+(inProgress.length!==1?"s":"")+" sent",sub:"Waiting on vendor response",btn:"View In Progress",color:"#22d3ee",fn:()=>set({view:"spas",filterSt:"all",searchQ:""})});
+    if(expiredSPAs.length>0)   prows.push({icon:"",label:expiredSPAs.length+" SPA"+(expiredSPAs.length!==1?"s":"")+" expired",sub:"Pricing no longer valid",btn:"Review Expired",color:"#f87171",fn:()=>set({view:"spas",filterSt:"expired",searchQ:"",activeVendor:"all"})});
+    if(todaySPAs.length>0)     prows.push({icon:"",label:todaySPAs.length+" expire today",sub:"Act now before pricing is lost",btn:"View Expiring Today",color:"#fb923c",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
+    if(expiringSPAs.length>0)  prows.push({icon:"",label:expiringSPAs.length+" expiring within 14 days",sub:"Renew before pricing expires",btn:"View Expiring",color:"#fbbf24",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
+    if(needFollowUp.length>0)  prows.push({icon:"",label:needFollowUp.length+" need vendor follow-up",sub:"No renewal request sent yet",btn:"Open Follow-Up List",color:"#818cf8",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
+    if(inProgress.length>0)    prows.push({icon:"",label:inProgress.length+" renewal request"+(inProgress.length!==1?"s":"")+" sent",sub:"Waiting on vendor response",btn:"View In Progress",color:"#22d3ee",fn:()=>set({view:"spas",filterSt:"all",searchQ:"",activeVendor:"all"})});
     prows.forEach(pr=>{
       const card=h("div",{style:{background:"rgba(0,0,0,.25)",borderRadius:"7px",padding:"12px 14px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",borderLeft:"3px solid "+pr.color,transition:"background .15s"}});
       card.addEventListener("mouseenter",()=>card.style.background="rgba(255,255,255,.04)");
@@ -958,22 +958,44 @@ function renderSPAs(allEUs){
   tb.appendChild(mkSel([["expiration","Sort: Expiration"],["vendor","Sort: Vendor"],["discount","Sort: Discount"],...(S.activeEU==="all"?[["account","Sort: Account"]]:[])] ,S.sortBy,v=>set({sortBy:v})));
   left.appendChild(tb);
 
-  // Vendor tab bar
+  // Vendor tab bar — counts always show total for that vendor (ignores status filter)
   const allSrc=getSrc();
-  const vCounts={};
-  allSrc.forEach(s=>{vCounts[s.vendor]=(vCounts[s.vendor]||0)+1;});
-  const vList=Object.entries(vCounts).sort((a,b)=>b[1]-a[1]);
+  // Count ALL spas per vendor ignoring status filter
+  const vCountsAll={};
+  allSrc.forEach(s=>{vCountsAll[s.vendor]=(vCountsAll[s.vendor]||0)+1;});
+  // Count filtered spas per vendor (with status filter applied)
+  const vCountsFiltered={};
+  allSrc.filter(s=>S.filterSt==="all"||s.status===S.filterSt).forEach(s=>{vCountsFiltered[s.vendor]=(vCountsFiltered[s.vendor]||0)+1;});
+  const vList=Object.entries(vCountsAll).sort((a,b)=>b[1]-a[1]);
   if(vList.length>1){
     const vtDiv=h("div",{id:"vendortabs"});
-    const allVT=h("div",{class:"vtab"+(S.activeVendor==="all"?" vactive":"")},"All Vendors");
-    allVT.addEventListener("click",()=>set({activeVendor:"all"}));
+    // "All Vendors" tab
+    const allVTLabel=S.filterSt!=="all"?"All Vendors (filtered)":"All Vendors";
+    const allVT=h("div",{class:"vtab"+(S.activeVendor==="all"?" vactive":"")},allVTLabel);
+    allVT.addEventListener("click",()=>set({activeVendor:"all",filterSt:"all"}));
     vtDiv.appendChild(allVT);
-    vList.forEach(([v,cnt])=>{
-      const vt=h("div",{class:"vtab"+(S.activeVendor===v?" vactive":"")},v+" ("+cnt+")");
-      vt.addEventListener("click",()=>set({activeVendor:v}));
+    vList.forEach(([v,totalCnt])=>{
+      const filteredCnt=vCountsFiltered[v]||0;
+      // Show filtered count when filter active, total otherwise
+      const label=S.filterSt!=="all"
+        ? v+" ("+filteredCnt+"/"+totalCnt+")"
+        : v+" ("+totalCnt+")";
+      const vt=h("div",{class:"vtab"+(S.activeVendor===v?" vactive":""),
+        title:S.filterSt!=="all"?filteredCnt+" matching / "+totalCnt+" total":""},label);
+      // Clicking vendor tab always resets status filter so all SPAs show
+      vt.addEventListener("click",()=>set({activeVendor:v,filterSt:"all"}));
       vtDiv.appendChild(vt);
     });
     left.appendChild(vtDiv);
+    // Show a "clear filter" hint when status filter is active
+    if(S.filterSt!=="all"){
+      const hint=h("div",{style:{fontSize:"11px",color:"#64748b",marginBottom:"8px",display:"flex",alignItems:"center",gap:"8px"}});
+      hint.appendChild(tx("Status filter active: "+S.filterSt,{color:"#94a3b8"}));
+      const clrBtn=h("button",{style:{background:"transparent",border:"1px solid #2a3a52",borderRadius:"4px",padding:"2px 8px",fontSize:"11px",color:"#64748b",cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}},"✕ Clear filter");
+      clrBtn.addEventListener("click",()=>set({filterSt:"all"}));
+      hint.appendChild(clrBtn);
+      left.appendChild(hint);
+    }
   }
 
   const tw=h("div",{class:"tbl-wrap"});
@@ -1267,7 +1289,7 @@ function render(){
     if(S.activeEU===eu.name) opt.selected=true;
     euSel2.appendChild(opt);
   });
-  euSel2.addEventListener("change",e=>set({activeEU:e.target.value,selSPA:null,searchQ:""}));
+  euSel2.addEventListener("change",e=>set({activeEU:e.target.value,selSPA:null,searchQ:"",activeVendor:"all",filterSt:"all"}));
   selWrap.appendChild(euSel2);
   selWrap.appendChild(h("span",{class:"eu-select-arrow"},"▾"));
   accountBar.appendChild(selWrap);
