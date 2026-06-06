@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>SPAtrack</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Syne:wght@700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -250,13 +251,23 @@ function toast(msg,type="ok",ms=3000){ S.toast={msg,type};render();setTimeout(()
 // ═══════════════════════════════════════════
 async function doAddSPA(spa) {
   try {
-    const row=await apiPost("/api/spas",{vendor:normalizeVendor(spa.vendor)||spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
-    const ns={id:row.id,vendor:row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],status:calcStatus(row.expiration)};
+    const row=await apiPost("/api/spas",{vendor:normalizeVendor(spa.vendor)||spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:null,renewal_requested:false});
+    const ns={id:row.id,vendor:normalizeVendor(row.vendor)||row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],docUrl:row.doc_url||"",renewalRequested:false,renewalStatus:"",status:calcStatus(row.expiration,null)};
+    // If replacing an expired SPA, delete old one first
+    if(S._replacingSPA){
+      const oldId=S._replacingSPA.id;
+      try{await apiDel("/api/spas?id="+oldId);}catch(e){}
+      S.spas=S.spas.filter(s=>s.id!==oldId);
+      if(S.selSPA?.id===oldId) S.selSPA=ns;
+      S._replacingSPA=null;
+      toast("SPA renewed successfully ✓");
+    } else {
+      toast("SPA saved ✓");
+    }
     S.spas=[...S.spas,ns];
     if(S.margins[spa.endUser]===undefined){await apiPost("/api/margins",{end_user:spa.endUser,margin:15});S.margins[spa.endUser]=15;}
     S.showAdd=false;S.showImport=false;S.newSPA=blankSPA();
     S.imp={step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null};
-    toast("SPA saved ✓");
   } catch(e){toast("Save failed: "+e.message,"err");}
 }
 
@@ -264,7 +275,7 @@ async function doEditSPA() {
   try {
     const spa=S.editSPA;
     const row=await apiPut("/api/spas",{id:spa.id,vendor:normalizeVendor(spa.vendor)||spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:spa.renewalStatus||null});
-    const us={id:row.id,vendor:row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],status:calcStatus(row.expiration)};
+    const us={id:row.id,vendor:normalizeVendor(row.vendor)||row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],docUrl:row.doc_url||"",renewalRequested:row.renewal_requested||false,renewalStatus:row.renewal_status||"",status:calcStatus(row.expiration,row.renewal_status)};
     S.spas=S.spas.map(s=>s.id===us.id?us:s);
     S.selSPA=us;S.showEdit=false;S.editSPA=null;
     toast("SPA updated ✓");
@@ -405,13 +416,22 @@ CRITICAL PRICING RULES — read carefully:
       messageContent=[{type:"text",text:prompt+"\n\nHere is the spreadsheet data in CSV format:\n\n"+S.imp.csvText}];
     } else {
       try {
-        const bytes=new Uint8Array(Uint8Array.from(atob(S.imp.b64),c=>c.charCodeAt(0)).buffer);
-        const raw=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
-        const matches=raw.match(/<w:t[^>]*>([^<]+)<\/w:t>/g)||[];
-        const docText=matches.map(m=>m.replace(/<[^>]+>/g,"")).join(" ").trim()||"[Could not extract text]";
+        // Use mammoth.js for proper Word doc text extraction
+        const arrayBuf=Uint8Array.from(atob(S.imp.b64),c=>c.charCodeAt(0)).buffer;
+        const mammothResult=await mammoth.extractRawText({arrayBuffer:arrayBuf});
+        const docText=mammothResult.value.trim()||"[Could not extract text from Word document]";
         messageContent=[{type:"text",text:prompt+"\n\nWord document text content:\n\n"+docText}];
       } catch(we) {
-        messageContent=[{type:"text",text:prompt+"\n\nWord document could not be read. Return empty JSON."}];
+        // Fallback: manual XML extraction
+        try {
+          const bytes=new Uint8Array(Uint8Array.from(atob(S.imp.b64),c=>c.charCodeAt(0)).buffer);
+          const raw=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
+          const matches=raw.match(/<w:t[^>]*>([^<]+)<\/w:t>/g)||[];
+          const docText=matches.map(m=>m.replace(/<[^>]+>/g,"")).join(" ").trim()||"[Could not extract text]";
+          messageContent=[{type:"text",text:prompt+"\n\nWord document text content:\n\n"+docText}];
+        } catch(we2) {
+          messageContent=[{type:"text",text:prompt+"\n\nWord document could not be read. Return empty JSON."}];
+        }
       }
     }
 
@@ -1056,10 +1076,12 @@ function renderSPAs(allEUs){
         // Store as data URL for now (Option 3 upgrade: use Supabase Storage)
         const dataUrl=reader.result;
         try{
-          await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:spa.discount,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:dataUrl,renewal_status:spa.renewalStatus||null});
-          S.spas=S.spas.map(s=>s.id===spa.id?{...s,docUrl:dataUrl}:s);
-          S.selSPA={...spa,docUrl:dataUrl};
+          await apiPut("/api/spas",{id:spa.id,vendor:spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:spa.discount,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:dataUrl,renewal_status:spa.renewalStatus||null,renewal_requested:spa.renewalRequested||false});
+          const updatedSPA={...spa,docUrl:dataUrl};
+          S.spas=S.spas.map(s=>s.id===spa.id?updatedSPA:s);
+          S.selSPA=updatedSPA;
           toast("Document attached ✓");
+          render();
         }catch(err){toast("Upload failed: "+err.message,"err");}
       };
       reader.readAsDataURL(f);
