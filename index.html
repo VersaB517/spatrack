@@ -149,6 +149,12 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 /* FILE TYPE ICONS */
 .file-icon{font-size:28px;margin-bottom:8px;}
 /* PDF VIEWER */
+.delta-modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:600;padding:20px;}
+.delta-box{background:#0d1117;border:1px solid #1e2d42;border-radius:12px;width:100%;max-width:800px;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;}
+.delta-hdr{padding:16px 20px;border-bottom:1px solid #131b28;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.delta-body{overflow-y:auto;padding:16px 20px;flex:1;}
+.delta-row{display:grid;grid-template-columns:110px 1fr 90px 90px 80px 70px;gap:8px;padding:8px 10px;border-radius:5px;font-size:12px;align-items:center;margin-bottom:3px;}
+.delta-hdr-row{display:grid;grid-template-columns:110px 1fr 90px 90px 80px 70px;gap:8px;padding:6px 10px;font-size:10px;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;}
 .pdf-viewer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;z-index:600;padding:20px;}
 .pdf-viewer-header{display:flex;align-items:center;gap:12px;width:100%;max-width:900px;margin-bottom:12px;}
 .pdf-viewer-frame{width:100%;max-width:900px;flex:1;border-radius:8px;border:1px solid #1e2d42;background:#fff;}
@@ -253,14 +259,37 @@ async function doAddSPA(spa) {
   try {
     const row=await apiPost("/api/spas",{vendor:normalizeVendor(spa.vendor)||spa.vendor,end_user:spa.endUser,spa_number:spa.spaNumber,discount:parseFloat(spa.discount)||0,expiration:spa.expiration,category:spa.category,items:spa.items,doc_url:spa.docUrl||null,renewal_status:null,renewal_requested:false});
     const ns={id:row.id,vendor:normalizeVendor(row.vendor)||row.vendor,endUser:row.end_user,spaNumber:row.spa_number,discount:row.discount,expiration:row.expiration,category:row.category,items:row.items||[],docUrl:row.doc_url||"",renewalRequested:false,renewalStatus:"",status:calcStatus(row.expiration,null)};
-    // If replacing an expired SPA, delete old one first
+    // If replacing an expired SPA, delete old one and compute delta
     if(S._replacingSPA){
-      const oldId=S._replacingSPA.id;
+      const oldSPA=S._replacingSPA;
+      const oldId=oldSPA.id;
+      // Compute price delta before deleting
+      const deltaItems=[];
+      ns.items.forEach(newItem=>{
+        const oldItem=oldSPA.items.find(o=>o.partNumber===newItem.partNumber);
+        if(oldItem){
+          const oldSPAPrice=oldItem.listPrice*(1-oldSPA.discount/100);
+          const newSPAPrice=newItem.listPrice*(1-ns.discount/100);
+          const diff=newSPAPrice-oldSPAPrice;
+          const pct=oldSPAPrice>0?((diff/oldSPAPrice)*100):0;
+          deltaItems.push({partNumber:newItem.partNumber,description:newItem.description,uom:newItem.uom||"EA",oldPrice:oldSPAPrice,newPrice:newSPAPrice,diff,pct});
+        } else {
+          deltaItems.push({partNumber:newItem.partNumber,description:newItem.description,uom:newItem.uom||"EA",oldPrice:null,newPrice:newItem.listPrice*(1-ns.discount/100),diff:null,pct:null,isNew:true});
+        }
+      });
+      // Parts removed in renewal
+      oldSPA.items.forEach(oldItem=>{
+        if(!ns.items.find(n=>n.partNumber===oldItem.partNumber)){
+          deltaItems.push({partNumber:oldItem.partNumber,description:oldItem.description,uom:oldItem.uom||"EA",oldPrice:oldItem.listPrice*(1-oldSPA.discount/100),newPrice:null,diff:null,pct:null,isRemoved:true});
+        }
+      });
+      S._deltaData={vendor:ns.vendor,endUser:ns.endUser,oldSPA:oldSPA.spaNumber,newSPA:ns.spaNumber,items:deltaItems,oldDiscount:oldSPA.discount,newDiscount:ns.discount};
       try{await apiDel("/api/spas?id="+oldId);}catch(e){}
       S.spas=S.spas.filter(s=>s.id!==oldId);
       if(S.selSPA?.id===oldId) S.selSPA=ns;
       S._replacingSPA=null;
-      toast("SPA renewed successfully ✓");
+      S.showDelta=true;
+      toast("SPA renewed ✓ — price comparison ready");
     } else {
       toast("SPA saved ✓");
     }
@@ -966,7 +995,7 @@ function renderSPAs(allEUs){
   // Count filtered spas per vendor (with status filter applied)
   const vCountsFiltered={};
   allSrc.filter(s=>S.filterSt==="all"||s.status===S.filterSt).forEach(s=>{vCountsFiltered[s.vendor]=(vCountsFiltered[s.vendor]||0)+1;});
-  const vList=Object.entries(vCountsAll).sort((a,b)=>b[1]-a[1]);
+  const vList=Object.entries(vCountsAll).sort((a,b)=>a[0].localeCompare(b[0]));
   if(vList.length>1){
     const vtDiv=h("div",{id:"vendortabs"});
     // "All Vendors" tab
@@ -1139,98 +1168,6 @@ function renderSPAs(allEUs){
   return wrap;
 }
 
-// ═══════════════════════════════════════════
-//  CONTRACT BUILDER
-// ═══════════════════════════════════════════
-function renderContract(allEUs){
-  const src=getSrc(),summ=getSummary(src);
-  const euList=S.activeEU==="all"?allEUs:allEUs.filter(e=>e.name===S.activeEU);
-  const cols=S.activeEU==="all"?"1fr 120px 65px 105px 105px 105px 95px":"1fr 65px 105px 105px 105px 95px";
-  const wrap=h("div",{class:"fadein"});
-  wrap.appendChild(h("h2",{class:"syne mb16",style:{fontSize:"20px",fontWeight:"700",color:"#dde3f0"}},"Contract Builder"+(S.activeEU!=="all"?" · "+S.activeEU:"")));
-
-  // margins
-  const mc=h("div",{class:"card mb14",style:{padding:"12px 16px"}});
-  mc.appendChild(h("div",{class:"stat-label mb10"},S.activeEU==="all"?"Margin Settings · Per Account":"Target Margin"));
-  const mrow=h("div",{class:"flex gap10",style:{flexWrap:"wrap"}});
-  euList.forEach(eu=>{
-    const box=h("div",{class:"subcard flex gap8",style:{alignItems:"center",border:`1px solid ${eu.color}22`,padding:"7px 12px"}});
-    box.appendChild(dot(eu.color,6));
-    box.appendChild(tx(eu.name,{fontSize:"11px",color:eu.color,minWidth:"90px"}));
-    const inp=h("input",{class:"inp",type:"number",min:"0",max:"100",style:{width:"52px",textAlign:"center",fontFamily:"'Syne',sans-serif",fontWeight:"700",fontSize:"14px"},value:String(S.margins[eu.name]??15)});
-    inp.addEventListener("change",e=>doUpdateMargin(eu.name,Number(e.target.value)));
-    box.appendChild(inp);
-    box.appendChild(tx("%",{fontFamily:"'Syne',sans-serif",color:eu.color,fontWeight:"700",fontSize:"14px"}));
-    mrow.appendChild(box);
-  });
-  mc.appendChild(mrow);wrap.appendChild(mc);
-
-  const sg=h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"10px",marginBottom:"14px"}});
-  [["Total List",summ.tList,"#8ba9d4"],["SPA Cost",summ.tSPA,"#4ade80"],["Contract Price",summ.tContract,"#4f8ef7"],["Gross Profit",summ.tGP,"#fbbf24"]].forEach(([l,v,c])=>{
-    const cd=h("div",{class:"stat-card"});
-    cd.appendChild(h("div",{class:"stat-label"},l));
-    cd.appendChild(h("div",{class:"syne",style:{fontSize:"16px",fontWeight:"700",color:c}},fmtMoney(v)));
-    sg.appendChild(cd);
-  });
-  wrap.appendChild(sg);
-
-  // breakdown
-  const bt=h("div",{class:"card overflow-hidden mb14"});
-  bt.appendChild(h("div",{class:"stat-label",style:{padding:"10px 16px",borderBottom:"1px solid #131b28"}},"Vendor Breakdown"));
-  const bh=h("div",{class:"tbl-hdr",style:{gridTemplateColumns:cols}});
-  ["Vendor",...(S.activeEU==="all"?["Account"]:[]),"Disc%","List","SPA Cost","Contract","GP"].forEach(c=>bh.appendChild(h("div",{},c)));
-  bt.appendChild(bh);
-  let ri=0;
-  src.filter(s=>s.status!=="expired").forEach(spa=>{
-    const m=S.margins[spa.endUser]??15,lt=spa.items.reduce((s,i)=>s+i.listPrice*i.qty,0);
-    const sc=lt*(1-spa.discount/100),ct=sc*(1+m/100);
-    const row=h("div",{style:{display:"grid",gridTemplateColumns:cols,padding:"10px 16px",background:ri++%2===0?"#0d1117":"#09111a",borderTop:"1px solid #0d1520",alignItems:"center"}});
-    const vc=h("div");
-    vc.appendChild(tx(spa.vendor,{fontWeight:"700",fontSize:"14px",display:"block",color:"#f1f5f9"}));
-    vc.appendChild(tx(spa.items.length+" items",{fontSize:"9px",color:"#2a3a52",display:"block",marginTop:"1px"}));
-    row.appendChild(vc);
-    if(S.activeEU==="all")row.appendChild(h("div",{},pill(spa.endUser,euCol(spa.endUser,allEUs))));
-    row.appendChild(h("span",{class:"syne",style:{fontSize:"13px",fontWeight:"700",color:"#4f8ef7"}},spa.discount+"%"));
-    row.appendChild(tx(fmtMoney(lt),{fontSize:"11px",color:"#8ba9d4"}));
-    row.appendChild(tx(fmtMoney(sc),{fontSize:"11px",color:"#4ade80"}));
-    row.appendChild(tx(fmtMoney(ct),{fontSize:"12px",fontWeight:"600",color:euCol(spa.endUser,allEUs)}));
-    row.appendChild(tx(fmtMoney(ct-sc),{fontSize:"11px",color:"#fbbf24"}));
-    bt.appendChild(row);
-  });
-  const foot=h("div",{class:"tbl-foot",style:{gridTemplateColumns:cols}});
-  foot.appendChild(tx("TOTAL",{fontWeight:"700",fontSize:"12px"}));
-  if(S.activeEU==="all")foot.appendChild(h("div"));
-  foot.appendChild(h("div"));
-  foot.appendChild(tx(fmtMoney(summ.tList),{fontSize:"12px",fontWeight:"700",color:"#8ba9d4"}));
-  foot.appendChild(tx(fmtMoney(summ.tSPA),{fontSize:"12px",fontWeight:"700",color:"#4ade80"}));
-  foot.appendChild(h("span",{class:"syne",style:{fontSize:"13px",fontWeight:"800",color:"#4f8ef7"}},fmtMoney(summ.tContract)));
-  foot.appendChild(tx(fmtMoney(summ.tGP),{fontSize:"12px",fontWeight:"700",color:"#fbbf24"}));
-  bt.appendChild(foot);wrap.appendChild(bt);
-
-  // line items
-  const li=h("div",{class:"card overflow-hidden"});
-  li.appendChild(h("div",{class:"stat-label",style:{padding:"10px 16px",borderBottom:"1px solid #131b28"}},"All Line Items"));
-  const lh=h("div",{class:"tbl-hdr",style:{gridTemplateColumns:"85px 1fr 100px 40px 90px 90px 90px"}});
-  ["Vendor","Description","Part #","Qty","List","SPA","Contract"].forEach(c=>lh.appendChild(h("div",{},c)));
-  li.appendChild(lh);
-  let lii=0;
-  src.filter(s=>s.status!=="expired").forEach(spa=>{
-    spa.items.forEach(item=>{
-      const m=S.margins[spa.endUser]??15,list=item.listPrice*item.qty,cost=list*(1-spa.discount/100),cont=cost*(1+m/100);
-      const row=h("div",{style:{display:"grid",gridTemplateColumns:"85px 1fr 100px 40px 90px 90px 90px",padding:"8px 16px",background:lii++%2===0?"#0d1117":"#09111a",borderTop:"1px solid #0d1520",alignItems:"center",fontSize:"11px"}});
-      row.appendChild(tx(spa.vendor,{color:"#4a5568"}));
-      row.appendChild(tx(item.description,{color:"#8ba9d4"}));
-      row.appendChild(tx(item.partNumber,{color:"#4a5568",fontSize:"10px"}));
-      row.appendChild(tx(String(item.qty)));
-      row.appendChild(tx(fmtMoney(list),{color:"#4a5568"}));
-      row.appendChild(tx(fmtSPA(cost),{color:"#4ade80"}));
-      row.appendChild(tx(fmtMoney(cont),{color:euCol(spa.endUser,allEUs),fontWeight:"600"}));
-      li.appendChild(row);
-    });
-  });
-  wrap.appendChild(li);
-  return wrap;
-}
 
 // ═══════════════════════════════════════════
 //  MAIN RENDER
@@ -1259,7 +1196,7 @@ function render(){
   const nav=h("div",{id:"topnav"});
   nav.appendChild(h("div",{class:"logo"},"SPA",h("span",{},"track")));
   nav.appendChild(h("div",{class:"nav-divider"}));
-  [["dashboard","Overview"],["spas","SPA Library"],["contract","Contract Builder"]].forEach(([v,l])=>{
+  [["dashboard","Overview"],["spas","SPA Library"]].forEach(([v,l])=>{
     const ni=h("div",{class:"navitem"+(S.view===v&&!searchActive?" active":"")},l);
     ni.addEventListener("click",()=>set({view:v,searchQ:"",selSPA:v!==S.view?null:S.selSPA}));
     nav.appendChild(ni);
@@ -1335,7 +1272,7 @@ function render(){
       if(S.searchQ.trim()) mainEl.appendChild(renderSearch());
       else if(S.view==="dashboard") mainEl.appendChild(renderDashboard(aEUs));
       else if(S.view==="spas")      mainEl.appendChild(renderSPAs(aEUs));
-      else if(S.view==="contract")  mainEl.appendChild(renderContract(aEUs));
+
     }
   });
   si.addEventListener("keydown",e=>{if(e.key==="Escape"){S.searchQ="";render();}});
@@ -1352,7 +1289,7 @@ function render(){
   if(searchActive)          main.appendChild(renderSearch());
   else if(S.view==="dashboard") main.appendChild(renderDashboard(allEUs));
   else if(S.view==="spas")      main.appendChild(renderSPAs(allEUs));
-  else if(S.view==="contract")  main.appendChild(renderContract(allEUs));
+
   app.appendChild(main);
 
   // ── MODALS ──
@@ -1421,6 +1358,67 @@ function render(){
     br.appendChild(btn("Cancel","btn btn-ghost",()=>set({showDeleteEU:false})));
     const db=btn("Yes, Delete Account","btn btn-danger",doDeleteEU);db.style.flex="2";br.appendChild(db);
     box.appendChild(br);bd.appendChild(box);app.appendChild(bd);
+  }
+
+  if(S.showDelta&&S.deltaData||S.showDelta&&S._deltaData){
+    const d=S._deltaData;
+    if(d){
+      const bd=h("div",{class:"delta-modal"});
+      const box=h("div",{class:"delta-box"});
+      // Header
+      const dh=h("div",{class:"delta-hdr"});
+      dh.appendChild(h("div",{style:{flex:"1"}},
+        h("div",{class:"syne",style:{fontSize:"16px",fontWeight:"800",color:"#f1f5f9"}},"Price Change Analysis"),
+        h("div",{style:{fontSize:"12px",color:"#64748b",marginTop:"3px"}},d.vendor+" · "+d.endUser),
+        h("div",{style:{fontSize:"11px",color:"#4a5568",marginTop:"2px"}},d.oldSPA+" → "+d.newSPA)
+      ));
+      const cls=btn("✕ Close","btn btn-ghost",()=>{S.showDelta=false;render();});
+      dh.appendChild(cls);
+      box.appendChild(dh);
+      // Summary bar
+      const increased=d.items.filter(i=>i.diff>0).length;
+      const decreased=d.items.filter(i=>i.diff<0).length;
+      const unchanged=d.items.filter(i=>i.diff===0).length;
+      const allPriced=d.items.filter(i=>i.diff!==null&&!i.isNew&&!i.isRemoved);
+      const avgPct=allPriced.length>0?(allPriced.reduce((s,i)=>s+i.pct,0)/allPriced.length):0;
+      const sb=h("div",{style:{background:"#09111a",padding:"12px 20px",display:"flex",gap:"20px",flexWrap:"wrap",borderBottom:"1px solid #131b28",flexShrink:"0"}});
+      [[increased+" increased","#f87171"],[decreased+" decreased","#4ade80"],[unchanged+" unchanged","#64748b"],["Avg change: "+(avgPct>=0?"+":"")+avgPct.toFixed(1)+"%",avgPct>0?"#f87171":avgPct<0?"#4ade80":"#64748b"]].forEach(([label,color])=>{
+        sb.appendChild(h("div",{style:{fontSize:"12px",fontWeight:"600",color}},"● "+label));
+      });
+      if(d.newDiscount!==d.oldDiscount) sb.appendChild(h("div",{style:{fontSize:"12px",fontWeight:"600",color:"#fbbf24"}},"⚠ Discount changed: "+d.oldDiscount+"% → "+d.newDiscount+"%"));
+      box.appendChild(sb);
+      // Table
+      const db=h("div",{class:"delta-body"});
+      const hrow=h("div",{class:"delta-hdr-row"});
+      ["Part #","Description","Old SPA","New SPA","Change","% Chg"].forEach(col=>hrow.appendChild(h("div",{},col)));
+      db.appendChild(hrow);
+      d.items.forEach(item=>{
+        const row=h("div",{class:"delta-row",style:{background:item.isNew?"rgba(79,142,247,.06)":item.isRemoved?"rgba(248,113,113,.06)":item.diff>0?"rgba(248,113,113,.06)":item.diff<0?"rgba(74,222,128,.06)":"#09111a"}});
+        row.appendChild(tx(item.partNumber,{fontSize:"11px",color:"#8ba9d4",fontWeight:"600"}));
+        row.appendChild(tx(item.description,{fontSize:"11px",color:"#64748b"}));
+        if(item.isNew){
+          row.appendChild(tx("—",{color:"#4a5568"}));
+          row.appendChild(tx(fmtSPA(item.newPrice)+"/"+item.uom,{color:"#4f8ef7"}));
+          row.appendChild(h("span",{style:{background:"#1e3a5f",color:"#4f8ef7",borderRadius:"3px",padding:"1px 6px",fontSize:"10px",fontWeight:"600"}},"NEW"));
+          row.appendChild(tx("—",{color:"#4a5568"}));
+        } else if(item.isRemoved){
+          row.appendChild(tx(fmtSPA(item.oldPrice)+"/"+item.uom,{color:"#4a5568"}));
+          row.appendChild(tx("—",{color:"#4a5568"}));
+          row.appendChild(h("span",{style:{background:"#2d0a0a",color:"#f87171",borderRadius:"3px",padding:"1px 6px",fontSize:"10px",fontWeight:"600"}},"REMOVED"));
+          row.appendChild(tx("—",{color:"#4a5568"}));
+        } else {
+          const diffColor=item.diff>0?"#f87171":item.diff<0?"#4ade80":"#64748b";
+          row.appendChild(tx(fmtSPA(item.oldPrice)+"/"+item.uom,{color:"#8ba9d4"}));
+          row.appendChild(tx(fmtSPA(item.newPrice)+"/"+item.uom,{color:diffColor,fontWeight:"600"}));
+          row.appendChild(tx((item.diff>=0?"+":"")+fmtSPA(item.diff)+"/"+item.uom,{color:diffColor,fontWeight:"600"}));
+          row.appendChild(tx((item.pct>=0?"+":"")+item.pct.toFixed(1)+"%",{color:diffColor,fontWeight:"700"}));
+        }
+        db.appendChild(row);
+      });
+      box.appendChild(db);
+      bd.appendChild(box);
+      app.appendChild(bd);
+    }
   }
 
   if(S.showDeleteConfirm){
