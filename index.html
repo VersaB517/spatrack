@@ -887,11 +887,11 @@ function renderDashboard(allEUs){
     pc.appendChild(ph);
     const pgrid=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"14px"}});
     const prows=[];
-    if(expiredSPAs.length>0)   prows.push({icon:"",label:expiredSPAs.length+" SPA"+(expiredSPAs.length!==1?"s":"")+" expired",sub:"Pricing no longer valid",btn:"Review Expired",color:"#f87171",fn:()=>set({view:"spas",filterSt:"expired",searchQ:"",activeVendor:"all"})});
-    if(todaySPAs.length>0)     prows.push({icon:"",label:todaySPAs.length+" expire today",sub:"Act now before pricing is lost",btn:"View Expiring Today",color:"#fb923c",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
-    if(expiringSPAs.length>0)  prows.push({icon:"",label:expiringSPAs.length+" expiring within 14 days",sub:"Renew before pricing expires",btn:"View Expiring",color:"#fbbf24",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
-    if(needFollowUp.length>0)  prows.push({icon:"",label:needFollowUp.length+" need vendor follow-up",sub:"No renewal request sent yet",btn:"Open Follow-Up List",color:"#818cf8",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
-    if(inProgress.length>0)    prows.push({icon:"",label:inProgress.length+" renewal request"+(inProgress.length!==1?"s":"")+" sent",sub:"Waiting on vendor response",btn:"View In Progress",color:"#22d3ee",fn:()=>set({view:"spas",filterSt:"all",searchQ:"",activeVendor:"all"})});
+    if(expiredSPAs.length>0)   prows.push({icon:"",label:expiredSPAs.length+" SPA"+(expiredSPAs.length!==1?"s":"")+" expired",sub:"Pricing is no longer valid",btn:"Review Expired",color:"#f87171",fn:()=>set({view:"spas",filterSt:"expired",searchQ:"",activeVendor:"all"})});
+    if(todaySPAs.length>0)     prows.push({icon:"",label:todaySPAs.length+" expire today",sub:"Last chance — pricing expires at end of day",btn:"View Expiring Today",color:"#fb923c",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
+    if(expiringSPAs.length>0)  prows.push({icon:"",label:expiringSPAs.length+" expiring within 14 days",sub:"Pricing expires soon",btn:"View Expiring",color:"#fbbf24",fn:()=>set({view:"spas",filterSt:"expiring",searchQ:"",activeVendor:"all"})});
+    if(needFollowUp.length>0)  prows.push({icon:"",label:needFollowUp.length+" not yet contacted",sub:"Expired or expiring — no renewal request sent to vendor yet. Click \u{1F4E8} Request on each row after you reach out.",btn:"Open Follow-Up List",color:"#818cf8",fn:()=>set({view:"spas",filterSt:"all",searchQ:"",activeVendor:"all"})});
+    if(inProgress.length>0)    prows.push({icon:"",label:inProgress.length+" vendor"+(inProgress.length!==1?"s":"")+" contacted",sub:"Renewal request sent — waiting on vendor to provide updated SPA",btn:"View In Progress",color:"#22d3ee",fn:()=>set({view:"spas",filterSt:"all",searchQ:"",activeVendor:"all"})});
     prows.forEach(pr=>{
       const card=h("div",{style:{background:"rgba(0,0,0,.25)",borderRadius:"7px",padding:"12px 14px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer",borderLeft:"3px solid "+pr.color,transition:"background .15s"}});
       card.addEventListener("mouseenter",()=>card.style.background="rgba(255,255,255,.04)");
