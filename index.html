@@ -793,6 +793,15 @@ function renderSearch(){
   hdg.appendChild(tx(' for "'+S.searchQ+'"',{fontSize:"14px",color:"#94a3b8",fontWeight:"500"}));
   wrap.appendChild(hdg);
 
+  // Sort by lowest SPA price of first matched item
+  results.sort((a,b)=>{
+    const aItem=a.matched[0];
+    const bItem=b.matched[0];
+    const aPrice=aItem?(aItem.listPrice*(1-a.spa.discount/100)):Infinity;
+    const bPrice=bItem?(bItem.listPrice*(1-b.spa.discount/100)):Infinity;
+    return aPrice-bPrice;
+  });
+
   results.forEach(({spa,matched})=>{
     const s=ST[spa.status];
     const color=euCol(spa.endUser,allEUs);
@@ -802,10 +811,10 @@ function renderSearch(){
     const hrow=h("div",{class:"flex gap10 mb10",style:{alignItems:"center",flexWrap:"wrap"}});
     hrow.appendChild(h("div",{class:"syne",style:{fontSize:"18px",fontWeight:"700",color:"#dde3f0"}},spa.vendor));
     hrow.appendChild(tx("· "+spa.spaNumber,{fontSize:"13px",color:"#94a3b8",fontWeight:"500"}));
-    hrow.appendChild(pill(spa.endUser,color));
+    hrow.appendChild(h("span",{style:{background:color+"22",color:color,border:"1px solid "+color+"44",borderRadius:"20px",padding:"3px 12px",fontSize:"14px",fontWeight:"700"}},spa.endUser));
     hrow.appendChild(badge(s.label,s.color,s.bg));
     const days=daysUntil(spa.expiration);
-    hrow.appendChild(tx(fmtDate(spa.expiration)+" ("+( days<0?Math.abs(days)+"d ago":days+"d left")+")",{fontSize:"10px",color:s.color,marginLeft:"auto"}));
+    hrow.appendChild(tx(fmtDate(spa.expiration)+" ("+(days<0?Math.abs(days)+"d ago":days===0?"Today":days+"d left")+")",{fontSize:"14px",color:s.color,marginLeft:"auto",fontWeight:"700"}));
     card.appendChild(hrow);
 
     // matched items
