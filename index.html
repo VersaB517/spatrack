@@ -800,7 +800,7 @@ function renderSearch(){
 
     // header row
     const hrow=h("div",{class:"flex gap10 mb10",style:{alignItems:"center",flexWrap:"wrap"}});
-    hrow.appendChild(h("div",{class:"syne",style:{fontSize:"17px",fontWeight:"700",color:"#dde3f0"}},spa.vendor));
+    hrow.appendChild(h("div",{class:"syne",style:{fontSize:"18px",fontWeight:"700",color:"#dde3f0"}},spa.vendor));
     hrow.appendChild(tx("· "+spa.spaNumber,{fontSize:"13px",color:"#94a3b8",fontWeight:"500"}));
     hrow.appendChild(pill(spa.endUser,color));
     hrow.appendChild(badge(s.label,s.color,s.bg));
@@ -1013,7 +1013,7 @@ function renderSPAs(allEUs){
     return 0;
   });
   const cols=S.activeEU==="all"?"1fr 120px 95px 75px 100px 85px 42px":"1fr 95px 75px 100px 85px 42px";
-  const wrap=h("div",{class:"fadein",style:{display:"grid",gridTemplateColumns:S.selSPA?"1fr 440px":"1fr",gap:"16px"}});
+  const wrap=h("div",{class:"fadein",style:{display:"grid",gridTemplateColumns:S.selSPA?"1fr 520px":"1fr",gap:"16px"}});
   const left=h("div");
   const tb=h("div",{class:"flex gap8 mb12",style:{alignItems:"center",flexWrap:"wrap"}});
   tb.appendChild(h("h2",{class:"syne",style:{fontSize:"19px",fontWeight:"700",color:"#f1f5f9",flex:"1",letterSpacing:"-.01em"}},S.activeEU==="all"?"All SPAs":S.activeEU));
