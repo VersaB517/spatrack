@@ -341,10 +341,12 @@ async function doUpdateMargin(eu,m) {
 async function loadHistory() {
   if(S.historyLoaded) return;
   try {
-    const data=await apiFetch("/api/history");
+    const resp=await fetch("/api/history");
+    if(!resp.ok){ S.history=[]; S.historyLoaded=true; return; }
+    const data=await resp.json();
     const twoYearsAgo=new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear()-2);
-    S.history=(data||[]).filter(h=>new Date(h.renewed_at)>=twoYearsAgo)
+    S.history=(Array.isArray(data)?data:[]).filter(h=>new Date(h.renewed_at)>=twoYearsAgo)
       .sort((a,b)=>a.end_user.localeCompare(b.end_user)||new Date(b.renewed_at)-new Date(a.renewed_at));
     S.historyLoaded=true;
   } catch(e){ S.history=[]; S.historyLoaded=true; }
@@ -352,14 +354,18 @@ async function loadHistory() {
 
 async function saveHistory(delta) {
   try {
-    await apiPost("/api/history",{
-      vendor:delta.vendor, end_user:delta.endUser,
-      old_spa_number:delta.oldSPA, new_spa_number:delta.newSPA,
-      renewed_at:new Date().toISOString().slice(0,10),
-      old_discount:delta.oldDiscount, new_discount:delta.newDiscount,
-      delta_items:delta.items
+    const resp=await fetch("/api/history",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        vendor:delta.vendor, end_user:delta.endUser,
+        old_spa_number:delta.oldSPA, new_spa_number:delta.newSPA,
+        renewed_at:new Date().toISOString().slice(0,10),
+        old_discount:delta.oldDiscount, new_discount:delta.newDiscount,
+        delta_items:delta.items
+      })
     });
-    S.historyLoaded=false; // force reload next time
+    S.historyLoaded=false;
   } catch(e){ console.error("History save failed:",e); }
 }
 
@@ -1425,7 +1431,7 @@ function render(){
       if(S.searchQ.trim()) mainEl.appendChild(renderSearch());
       else if(S.view==="dashboard") mainEl.appendChild(renderDashboard(aEUs));
       else if(S.view==="spas")      mainEl.appendChild(renderSPAs(aEUs));
-      else if(S.view==="history")   mainEl.appendChild(renderHistory());
+      else if(S.view==="history")   { if(!S.historyLoaded){loadHistory().then(()=>{const m=document.getElementById("main");if(m&&S.view==="history"){m.innerHTML="";m.appendChild(renderHistory());}});}mainEl.appendChild(renderHistory()); }
 
     }
   });
@@ -1443,7 +1449,15 @@ function render(){
   if(searchActive)          main.appendChild(renderSearch());
   else if(S.view==="dashboard") main.appendChild(renderDashboard(allEUs));
   else if(S.view==="spas")      main.appendChild(renderSPAs(allEUs));
-  else if(S.view==="history")   { loadHistory().then(()=>render()); main.appendChild(renderHistory()); }
+  else if(S.view==="history")   {
+    if(!S.historyLoaded) {
+      loadHistory().then(()=>{
+        const m=document.getElementById("main");
+        if(m&&S.view==="history"){m.innerHTML="";m.appendChild(renderHistory());}
+      });
+    }
+    main.appendChild(renderHistory());
+  }
 
   app.appendChild(main);
 
