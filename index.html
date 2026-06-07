@@ -1013,7 +1013,7 @@ function renderSPAs(allEUs){
     return 0;
   });
   const cols=S.activeEU==="all"?"1fr 120px 95px 75px 100px 85px 42px":"1fr 95px 75px 100px 85px 42px";
-  const wrap=h("div",{class:"fadein",style:{display:"grid",gridTemplateColumns:S.selSPA?"1fr 340px":"1fr",gap:"16px"}});
+  const wrap=h("div",{class:"fadein",style:{display:"grid",gridTemplateColumns:S.selSPA?"1fr 440px":"1fr",gap:"16px"}});
   const left=h("div");
   const tb=h("div",{class:"flex gap8 mb12",style:{alignItems:"center",flexWrap:"wrap"}});
   tb.appendChild(h("h2",{class:"syne",style:{fontSize:"19px",fontWeight:"700",color:"#f1f5f9",flex:"1",letterSpacing:"-.01em"}},S.activeEU==="all"?"All SPAs":S.activeEU));
@@ -1078,15 +1078,15 @@ function renderSPAs(allEUs){
     const row=h("div",{class:"tbl-row"+(isSel?" sel":"")+(S.compactView?" compact":""),style:{gridTemplateColumns:cols}});
     row.addEventListener("click",()=>set({selSPA:isSel?null:spa}));
     const vc=h("div");
-    vc.appendChild(tx(spa.vendor,{fontWeight:"700",fontSize:"14px",display:"block",color:"#f1f5f9"}));
-    vc.appendChild(tx(spa.spaNumber,{fontSize:"12px",color:"#64748b",display:"block",marginTop:"3px"}));
+    vc.appendChild(tx(spa.vendor,{fontWeight:"700",fontSize:"15px",display:"block",color:"#f1f5f9"}));
+    vc.appendChild(tx(spa.spaNumber,{fontSize:"13px",color:"#8ba9d4",display:"block",marginTop:"3px",fontWeight:"500"}));
     row.appendChild(vc);
     if(S.activeEU==="all")row.appendChild(h("div",{},pill(spa.endUser,euCol(spa.endUser,allEUs))));
-    row.appendChild(tx(spa.category,{fontSize:"12px",color:"#94a3b8"}));
+    row.appendChild(tx(spa.category,{fontSize:"13px",color:"#94a3b8",fontWeight:"500"}));
     row.appendChild(h("span",{class:"syne",style:{fontSize:"13px",fontWeight:"700",color:"#4f8ef7"}},spa.discount+"%"));
     const dc=h("div");
-    dc.appendChild(tx(fmtDate(spa.expiration),{fontSize:"12px",display:"block",color:"#dde3f0"}));
-    dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days===0?"Today":days+"d left",{fontSize:"11px",color:days<0?"#f87171":days===0?"#fb923c":days<=EXPIRING_DAYS?"#fbbf24":"#94a3b8",display:"block",marginTop:"2px",fontWeight:"500"}));
+    dc.appendChild(tx(fmtDate(spa.expiration),{fontSize:"13px",display:"block",color:"#dde3f0",fontWeight:"600"}));
+    dc.appendChild(tx(days<0?Math.abs(days)+"d ago":days===0?"Today":days+"d left",{fontSize:"12px",color:days<0?"#f87171":days===0?"#fb923c":days<=EXPIRING_DAYS?"#fbbf24":"#94a3b8",display:"block",marginTop:"3px",fontWeight:"600"}));
     row.appendChild(dc);
     // Status badge + renewal requested button
     const statusCell=h("div",{style:{display:"flex",flexDirection:"column",gap:"4px"}});
@@ -1120,8 +1120,8 @@ function renderSPAs(allEUs){
     const panel=h("div",{class:"card fadein sticky-top",style:{padding:"16px",height:"fit-content"}});
     const ph=h("div",{class:"flex mb10",style:{justifyContent:"space-between",alignItems:"start"}});
     const pt=h("div");
-    pt.appendChild(tx(spa.vendor,{fontFamily:"'Syne',sans-serif",fontSize:"15px",fontWeight:"700",display:"block"}));
-    pt.appendChild(tx(spa.spaNumber,{fontSize:"12px",color:"#8ba9d4",display:"block",marginTop:"3px"}));
+    pt.appendChild(tx(spa.vendor,{fontFamily:"'Syne',sans-serif",fontSize:"18px",fontWeight:"800",display:"block"}));
+    pt.appendChild(tx(spa.spaNumber,{fontSize:"13px",color:"#8ba9d4",display:"block",marginTop:"4px",fontWeight:"500"}));
     ph.appendChild(pt);
     const cr=h("div",{class:"flex gap6"});
     cr.appendChild(btn("Edit","btn btn-muted",()=>set({showEdit:true,editSPA:{...spa,_ni:blankItem()}})));
@@ -1181,29 +1181,52 @@ function renderSPAs(allEUs){
     uploadLabel.appendChild(uploadInput);
     docRow.appendChild(uploadLabel);
     panel.appendChild(docRow);
-    panel.appendChild(h("div",{class:"stat-label mb6"},"Line Items"));
-    spa.items.forEach(item=>{
+    // Part search inside panel
+    const psWrap=h("div",{style:{marginBottom:"10px"}});
+    const psInp=h("input",{type:"text",placeholder:"Search parts...",style:{background:"#09111a",border:"1px solid #1e2d42",borderRadius:"6px",padding:"7px 12px",fontSize:"12px",color:"#dde3f0",width:"100%",outline:"none",fontFamily:"'DM Sans',sans-serif"}});
+    let partFilter="";
+    psInp.addEventListener("input",e=>{
+      partFilter=e.target.value.toLowerCase();
+      // Re-render just the line items
+      const itemsContainer=panel.querySelector(".items-container");
+      if(itemsContainer){
+        itemsContainer.innerHTML="";
+        const filtered=spa.items.filter(item=>
+          item.partNumber.toLowerCase().includes(partFilter)||
+          item.description.toLowerCase().includes(partFilter)
+        );
+        if(!filtered.length){
+          itemsContainer.appendChild(h("div",{style:{padding:"12px",textAlign:"center",fontSize:"12px",color:"#4a5568"}},"No parts match"));
+        }
+        filtered.forEach(item=>itemsContainer.appendChild(buildItemCard(item,spa)));
+      }
+    });
+    psWrap.appendChild(psInp);
+    panel.appendChild(h("div",{style:{fontSize:"12px",fontWeight:"700",color:"#94a3b8",letterSpacing:".08em",textTransform:"uppercase",marginBottom:"8px"}},"Line Items"));
+    panel.appendChild(psWrap);
+    function buildItemCard(item,thisSpa){
       const uom=item.uom||"EA";
-      const spaUnit=item.listPrice*(1-spa.discount/100);
-      const totalSPA=spaUnit*item.qty;
-      const ic=h("div",{class:"subcard mb5",style:{padding:"8px 10px"}});
-      ic.appendChild(tx(item.partNumber,{fontSize:"10px",color:"#8ba9d4",fontWeight:"600",display:"block"}));
-      ic.appendChild(tx(item.description,{fontSize:"10px",color:"#4a5568",display:"block",marginTop:"1px",marginBottom:"5px"}));
-      const pr=h("div",{class:"flex gap8",style:{fontSize:"10px",flexWrap:"wrap"}});
-      pr.appendChild(tx("List: "+(item.listUnknown?"N/A":fmtMoney(item.listPrice)+"/"+uom),{color:"#4a5568"}));
-      pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#4a5568"}));
-      pr.appendChild(tx("SPA: "+fmtSPA(spaUnit)+"/"+uom,{color:"#4ade80"}));
-      pr.appendChild(tx("Total: "+fmtMoney(spaUnit*item.qty),{color:"#8ba9d4"}));
-      ic.appendChild(pr);panel.appendChild(ic);
+      const spaUnit=item.listPrice*(1-thisSpa.discount/100);
+      const ic=h("div",{class:"subcard mb5",style:{padding:"10px 12px"}});
+      ic.appendChild(tx(item.partNumber,{fontSize:"13px",color:"#8ba9d4",fontWeight:"700",display:"block",marginBottom:"3px"}));
+      ic.appendChild(tx(item.description,{fontSize:"12px",color:"#94a3b8",display:"block",marginTop:"1px",marginBottom:"7px",lineHeight:"1.4"}));
+      const pr=h("div",{class:"flex gap8",style:{fontSize:"12px",flexWrap:"wrap"}});
+      pr.appendChild(tx("List: "+(item.listUnknown?"N/A":fmtMoney(item.listPrice)+"/"+uom),{color:"#64748b"}));
+      pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#64748b"}));
+      pr.appendChild(tx("SPA: "+fmtSPA(spaUnit)+"/"+uom,{color:"#4ade80",fontWeight:"600"}));
+      pr.appendChild(tx("Total: "+fmtMoney(spaUnit*item.qty),{color:"#dde3f0",fontWeight:"600"}));
+      ic.appendChild(pr);
+      return ic;
+    }
+    const itemsContainer=h("div",{class:"items-container"});
+    spa.items.forEach(item=>itemsContainer.appendChild(buildItemCard(item,spa)));
+    panel.appendChild(itemsContainer);
+    const tot=h("div",{class:"subcard",style:{padding:"12px 14px",marginTop:"6px"}});
+    [["Total List",fmtMoney(lt),"#8ba9d4"],["SPA Cost ("+spa.discount+"% off)",fmtMoney(sc),"#4ade80"]].forEach(([l,v,c])=>{
+      const r=h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:"13px",marginBottom:"6px"}});
+      r.appendChild(tx(l,{color:"#94a3b8",fontWeight:"500"}));r.appendChild(tx(v,{color:c,fontWeight:"600"}));tot.appendChild(r);
     });
-    const tot=h("div",{class:"subcard",style:{padding:"10px 12px",marginTop:"4px"}});
-    [["Total List",fmtMoney(lt),"#8ba9d4"],[`SPA Cost (${spa.discount}% off)`,fmtMoney(sc),"#4ade80"]].forEach(([l,v,c])=>{
-      const r=h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:"11px",marginBottom:"4px"}});
-      r.appendChild(tx(l,{color:"#4a5568"}));r.appendChild(tx(v,{color:c}));tot.appendChild(r);
-    });
-    const br=h("div",{style:{borderTop:"1px solid #131b28",marginTop:"7px",paddingTop:"7px",display:"flex",justifyContent:"space-between",fontSize:"12px",fontWeight:"600"}});
-    br.appendChild(tx(`Contract (${m}% margin)`));br.appendChild(tx(fmtMoney(ct),{color}));
-    tot.appendChild(br);panel.appendChild(tot);
+    panel.appendChild(tot);
     wrap.appendChild(panel);
   }
   return wrap;
