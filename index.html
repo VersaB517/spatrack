@@ -155,6 +155,15 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .delta-body{overflow-y:auto;padding:16px 20px;flex:1;}
 .delta-row{display:grid;grid-template-columns:110px 1fr 90px 90px 80px 70px;gap:8px;padding:8px 10px;border-radius:5px;font-size:12px;align-items:center;margin-bottom:3px;}
 .delta-hdr-row{display:grid;grid-template-columns:110px 1fr 90px 90px 80px 70px;gap:8px;padding:6px 10px;font-size:10px;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;}
+.hist-card{background:#0d1117;border:1px solid #1e2d42;border-radius:8px;margin-bottom:10px;overflow:hidden;}
+.hist-card-hdr{padding:12px 16px;display:grid;grid-template-columns:1fr 120px 100px 90px 80px;gap:8px;align-items:center;cursor:pointer;transition:background .15s;}
+.hist-card-hdr:hover{background:#131b28;}
+.hist-card-body{padding:0 16px 14px;display:none;}
+.hist-card-body.open{display:block;}
+.hist-delta-row{display:grid;grid-template-columns:110px 1fr 90px 90px 80px 70px;gap:8px;padding:6px 8px;border-radius:4px;font-size:11px;align-items:center;margin-bottom:2px;}
+.hist-delta-hdr{display:grid;grid-template-columns:110px 1fr 90px 90px 80px 70px;gap:8px;padding:5px 8px;font-size:10px;font-weight:700;color:#4a5568;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid #131b28;margin-bottom:6px;}
+.eu-group-hdr{font-family:"Syne",sans-serif;font-size:16px;font-weight:700;color:#f1f5f9;padding:8px 0 8px 0;margin-top:18px;border-bottom:1px solid #1e2d42;margin-bottom:10px;}
+.eu-group-hdr:first-child{margin-top:0;}
 .pdf-viewer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;z-index:600;padding:20px;}
 .pdf-viewer-header{display:flex;align-items:center;gap:12px;width:100%;max-width:900px;margin-bottom:12px;}
 .pdf-viewer-frame{width:100%;max-width:900px;flex:1;border-radius:8px;border:1px solid #1e2d42;background:#fff;}
@@ -290,6 +299,7 @@ async function doAddSPA(spa) {
       S._replacingSPA=null;
       S.showDelta=true;
       toast("SPA renewed ✓ — price comparison ready");
+      await saveHistory(S._deltaData);
     } else {
       toast("SPA saved ✓");
     }
@@ -326,6 +336,31 @@ async function doAddEU() {
 async function doUpdateMargin(eu,m) {
   try{await apiPost("/api/margins",{end_user:eu,margin:m});S.margins[eu]=m;render();}
   catch(e){toast("Margin save failed","err");}
+}
+
+async function loadHistory() {
+  if(S.historyLoaded) return;
+  try {
+    const data=await apiFetch("/api/history");
+    const twoYearsAgo=new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear()-2);
+    S.history=(data||[]).filter(h=>new Date(h.renewed_at)>=twoYearsAgo)
+      .sort((a,b)=>a.end_user.localeCompare(b.end_user)||new Date(b.renewed_at)-new Date(a.renewed_at));
+    S.historyLoaded=true;
+  } catch(e){ S.history=[]; S.historyLoaded=true; }
+}
+
+async function saveHistory(delta) {
+  try {
+    await apiPost("/api/history",{
+      vendor:delta.vendor, end_user:delta.endUser,
+      old_spa_number:delta.oldSPA, new_spa_number:delta.newSPA,
+      renewed_at:new Date().toISOString().slice(0,10),
+      old_discount:delta.oldDiscount, new_discount:delta.newDiscount,
+      delta_items:delta.items
+    });
+    S.historyLoaded=false; // force reload next time
+  } catch(e){ console.error("History save failed:",e); }
 }
 
 async function toggleRenewalRequested(spa) {
@@ -1169,6 +1204,124 @@ function renderSPAs(allEUs){
 }
 
 
+
+// ═══════════════════════════════════════════
+//  COST IMPACT / SPA HISTORY
+// ═══════════════════════════════════════════
+function renderHistory(){
+  const wrap=h("div",{class:"fadein",id:"main",style:{padding:"20px 24px",maxWidth:"1100px"}});
+
+  // Header
+  const hdg=h("div",{class:"flex gap10 mb16",style:{alignItems:"center",flexWrap:"wrap"}});
+  hdg.appendChild(h("h2",{class:"syne",style:{fontSize:"19px",fontWeight:"700",color:"#f1f5f9",flex:"1"}},"Price Intel"));
+  hdg.appendChild(h("div",{style:{fontSize:"12px",color:"#4a5568"}},"Renewal price changes · Last 2 years"));
+  wrap.appendChild(hdg);
+
+  if(!S.historyLoaded){
+    const loading=h("div",{style:{textAlign:"center",padding:"40px",color:"#4a5568"}});
+    loading.appendChild(h("div",{class:"spin",style:{width:"24px",height:"24px",margin:"0 auto 12px"}}));
+    loading.appendChild(tx("Loading history...",{display:"block"}));
+    wrap.appendChild(loading);
+    return wrap;
+  }
+
+  if(!S.history.length){
+    const empty=h("div",{style:{textAlign:"center",padding:"60px 20px"}});
+    empty.appendChild(h("div",{style:{fontSize:"32px",marginBottom:"12px"}},"📊"));
+    empty.appendChild(h("div",{class:"syne",style:{fontSize:"16px",color:"#4a5568",marginBottom:"8px"}},"No renewal history yet"));
+    empty.appendChild(tx("When you renew an expired SPA the price comparison will be saved here.",{fontSize:"13px",color:"#2a3a52",display:"block"}));
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
+  // Group by end_user A-Z
+  const grouped={};
+  S.history.forEach(rec=>{
+    if(!grouped[rec.end_user]) grouped[rec.end_user]=[];
+    grouped[rec.end_user].push(rec);
+  });
+
+  Object.keys(grouped).sort((a,b)=>a.localeCompare(b)).forEach(eu=>{
+    wrap.appendChild(h("div",{class:"eu-group-hdr"},eu));
+    grouped[eu].forEach((rec,idx)=>{
+      const items=rec.delta_items||[];
+      const priced=items.filter(i=>i.diff!==null&&!i.isNew&&!i.isRemoved);
+      const avgPct=priced.length>0?(priced.reduce((s,i)=>s+i.pct,0)/priced.length):0;
+      const increased=items.filter(i=>i.diff>0).length;
+      const decreased=items.filter(i=>i.diff<0).length;
+      const newParts=items.filter(i=>i.isNew).length;
+      const removed=items.filter(i=>i.isRemoved).length;
+      const avgColor=avgPct>0?"#f87171":avgPct<0?"#4ade80":"#64748b";
+
+      const card=h("div",{class:"hist-card"});
+      const cardHdr=h("div",{class:"hist-card-hdr"});
+      // Vendor + SPA numbers
+      const vInfo=h("div");
+      vInfo.appendChild(h("div",{style:{fontSize:"13px",fontWeight:"700",color:"#f1f5f9"}},rec.vendor));
+      vInfo.appendChild(h("div",{style:{fontSize:"11px",color:"#4a5568",marginTop:"2px"}},(rec.old_spa_number||"—")+" → "+(rec.new_spa_number||"—")));
+      cardHdr.appendChild(vInfo);
+      // Renewed date
+      cardHdr.appendChild(h("div",{style:{fontSize:"12px",color:"#64748b",textAlign:"center"}},new Date(rec.renewed_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})));
+      // Change badges
+      const badges=h("div",{style:{display:"flex",gap:"4px",flexWrap:"wrap",justifyContent:"center"}});
+      if(increased>0) badges.appendChild(h("span",{style:{background:"rgba(248,113,113,.15)",color:"#f87171",borderRadius:"3px",padding:"1px 5px",fontSize:"10px",fontWeight:"600"}},increased+" ↑"));
+      if(decreased>0) badges.appendChild(h("span",{style:{background:"rgba(74,222,128,.15)",color:"#4ade80",borderRadius:"3px",padding:"1px 5px",fontSize:"10px",fontWeight:"600"}},decreased+" ↓"));
+      if(newParts>0)  badges.appendChild(h("span",{style:{background:"rgba(79,142,247,.15)",color:"#4f8ef7",borderRadius:"3px",padding:"1px 5px",fontSize:"10px",fontWeight:"600"}},newParts+" NEW"));
+      if(removed>0)   badges.appendChild(h("span",{style:{background:"rgba(248,113,113,.1)",color:"#f87171",borderRadius:"3px",padding:"1px 5px",fontSize:"10px",fontWeight:"600"}},removed+" REM"));
+      cardHdr.appendChild(badges);
+      // Avg % change
+      cardHdr.appendChild(h("div",{class:"syne",style:{fontSize:"14px",fontWeight:"700",color:avgColor,textAlign:"right"}},(avgPct>=0?"+":"")+avgPct.toFixed(1)+"%"));
+      // Expand arrow
+      const arrow=h("div",{style:{fontSize:"12px",color:"#2a3a52",textAlign:"center"}},"▾");
+      cardHdr.appendChild(arrow);
+
+      // Body — expandable delta table
+      const cardBody=h("div",{class:"hist-card-body"});
+      // Discount change note
+      if(rec.old_discount!==rec.new_discount){
+        cardBody.appendChild(h("div",{style:{background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",borderRadius:"5px",padding:"6px 10px",fontSize:"11px",color:"#fbbf24",marginBottom:"8px"}},"⚠ Discount changed: "+rec.old_discount+"% → "+rec.new_discount+"%"));
+      }
+      const dHdr=h("div",{class:"hist-delta-hdr"});
+      ["Part #","Description","Old SPA","New SPA","Change","% Chg"].forEach(c=>dHdr.appendChild(h("div",{},c)));
+      cardBody.appendChild(dHdr);
+      items.forEach(item=>{
+        const row=h("div",{class:"hist-delta-row",style:{background:item.isNew?"rgba(79,142,247,.06)":item.isRemoved?"rgba(248,113,113,.06)":item.diff>0?"rgba(248,113,113,.04)":item.diff<0?"rgba(74,222,128,.04)":"transparent"}});
+        row.appendChild(tx(item.partNumber,{fontSize:"11px",color:"#8ba9d4",fontWeight:"600"}));
+        row.appendChild(tx(item.description,{fontSize:"11px",color:"#64748b"}));
+        if(item.isNew){
+          row.appendChild(tx("—",{color:"#2a3a52"}));
+          row.appendChild(tx(fmtSPA(item.newPrice)+"/"+(item.uom||"EA"),{color:"#4f8ef7",fontWeight:"600"}));
+          row.appendChild(h("span",{style:{background:"#1e3a5f",color:"#4f8ef7",borderRadius:"3px",padding:"1px 6px",fontSize:"10px",fontWeight:"600"}},"NEW"));
+          row.appendChild(tx("—",{color:"#2a3a52"}));
+        } else if(item.isRemoved){
+          row.appendChild(tx(fmtSPA(item.oldPrice)+"/"+(item.uom||"EA"),{color:"#4a5568"}));
+          row.appendChild(tx("—",{color:"#2a3a52"}));
+          row.appendChild(h("span",{style:{background:"#2d0a0a",color:"#f87171",borderRadius:"3px",padding:"1px 6px",fontSize:"10px",fontWeight:"600"}},"REMOVED"));
+          row.appendChild(tx("—",{color:"#2a3a52"}));
+        } else {
+          const dc=item.diff>0?"#f87171":item.diff<0?"#4ade80":"#64748b";
+          row.appendChild(tx(fmtSPA(item.oldPrice)+"/"+(item.uom||"EA"),{color:"#8ba9d4"}));
+          row.appendChild(tx(fmtSPA(item.newPrice)+"/"+(item.uom||"EA"),{color:dc,fontWeight:"600"}));
+          row.appendChild(tx((item.diff>=0?"+":"")+fmtSPA(item.diff)+"/"+(item.uom||"EA"),{color:dc,fontWeight:"600"}));
+          row.appendChild(tx((item.pct>=0?"+":"")+item.pct.toFixed(1)+"%",{color:dc,fontWeight:"700"}));
+        }
+        cardBody.appendChild(row);
+      });
+      card.appendChild(cardHdr);
+      card.appendChild(cardBody);
+
+      // Toggle expand/collapse
+      cardHdr.addEventListener("click",()=>{
+        const isOpen=cardBody.classList.contains("open");
+        cardBody.classList.toggle("open",!isOpen);
+        arrow.textContent=isOpen?"▾":"▴";
+      });
+      wrap.appendChild(card);
+    });
+  });
+  return wrap;
+}
+
 // ═══════════════════════════════════════════
 //  MAIN RENDER
 // ═══════════════════════════════════════════
@@ -1196,7 +1349,7 @@ function render(){
   const nav=h("div",{id:"topnav"});
   nav.appendChild(h("div",{class:"logo"},"SPA",h("span",{},"track")));
   nav.appendChild(h("div",{class:"nav-divider"}));
-  [["dashboard","Overview"],["spas","SPA Library"]].forEach(([v,l])=>{
+  [["dashboard","Overview"],["spas","SPA Library"],["history","Price Intel"]].forEach(([v,l])=>{
     const ni=h("div",{class:"navitem"+(S.view===v&&!searchActive?" active":"")},l);
     ni.addEventListener("click",()=>set({view:v,searchQ:"",selSPA:v!==S.view?null:S.selSPA}));
     nav.appendChild(ni);
@@ -1272,6 +1425,7 @@ function render(){
       if(S.searchQ.trim()) mainEl.appendChild(renderSearch());
       else if(S.view==="dashboard") mainEl.appendChild(renderDashboard(aEUs));
       else if(S.view==="spas")      mainEl.appendChild(renderSPAs(aEUs));
+      else if(S.view==="history")   mainEl.appendChild(renderHistory());
 
     }
   });
@@ -1289,6 +1443,7 @@ function render(){
   if(searchActive)          main.appendChild(renderSearch());
   else if(S.view==="dashboard") main.appendChild(renderDashboard(allEUs));
   else if(S.view==="spas")      main.appendChild(renderSPAs(allEUs));
+  else if(S.view==="history")   { loadHistory().then(()=>render()); main.appendChild(renderHistory()); }
 
   app.appendChild(main);
 
