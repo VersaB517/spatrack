@@ -227,7 +227,7 @@ function buildEUs(spas,margins) {
   return sorted.map((name,i)=>({name,color:EU_COLORS[i%EU_COLORS.length]}));
 }
 function blankSPA()  { return {vendor:"",endUser:"",spaNumber:"",discount:"",expiration:"",category:"",items:[],docUrl:"",_ni:blankItem()}; }
-function blankItem() { return {partNumber:"",description:"",listPrice:"",qty:"",uom:"EA"}; }
+function blankItem() { return {partNumber:"",description:"",listPrice:"",stdCost:"",qty:"",uom:"EA"}; }
 function loadKey()   { try{return window.__ANTHROPIC_KEY||localStorage.getItem(APIKEY_KEY)||""; }catch(e){return "";} }
 function saveKey(k)  { try{localStorage.setItem(APIKEY_KEY,k);}catch(e){} }
 
@@ -277,8 +277,10 @@ async function doAddSPA(spa) {
       ns.items.forEach(newItem=>{
         const oldItem=oldSPA.items.find(o=>o.partNumber===newItem.partNumber);
         if(oldItem){
-          const oldSPAPrice=oldItem.listPrice*(1-oldSPA.discount/100);
-          const newSPAPrice=newItem.listPrice*(1-ns.discount/100);
+          const oldBase=oldItem.listPrice>0?oldItem.listPrice:oldItem.stdCost>0?oldItem.stdCost:0;
+          const oldSPAPrice=oldBase*(1-oldSPA.discount/100);
+          const newBase=newItem.listPrice>0?newItem.listPrice:newItem.stdCost>0?newItem.stdCost:0;
+          const newSPAPrice=newBase*(1-ns.discount/100);
           const diff=newSPAPrice-oldSPAPrice;
           const pct=oldSPAPrice>0?((diff/oldSPAPrice)*100):0;
           deltaItems.push({partNumber:newItem.partNumber,description:newItem.description,uom:newItem.uom||"EA",oldPrice:oldSPAPrice,newPrice:newSPAPrice,diff,pct});
@@ -460,11 +462,15 @@ async function doExtract() {
   "discount": 0,
   "expiration": "YYYY-MM-DD",
   "category": "Cabling|Fiber|Enclosures|Racks|Connectivity|Infrastructure|Other",
-  "items": [{"partNumber":"","description":"","listPrice":0.00,"qty":1,"uom":"FT"}]
+  "items": [{"partNumber":"","description":"","listPrice":0.00,"stdCost":0.00,"qty":1,"uom":"FT"}]
 }
 
 CRITICAL PRICING RULES — read carefully:
-- If the document only shows ONE price per item (no separate list price), set listPrice to 0. Only set listPrice if there is a clearly separate list/standard/retail price shown alongside the SPA price.
+- If the document only shows ONE price per item with no list/standard cost column: set listPrice to 0, stdCost to 0, and put the SPA price in as the item price at 0% discount.
+- If the document shows TWO prices (like Corning Standard Price + Quoted Price): set stdCost = Standard Price, listPrice = 0, and calculate discount = ((stdCost - quotedPrice) / stdCost * 100).
+- listPrice = manufacturer published LIST price per unit (if shown). If only one price shown, set listPrice to 0.
+- stdCost = standard/distributor cost per unit (e.g. Corning "Standard Price" column). If not shown, set to 0.
+- spaPrice is NOT a field — the SPA price is calculated from listPrice and discount, or use stdCost as base if that is what is shown.
 - listPrice must ALWAYS be the price per single unit (per 1 FT, per 1 EA, etc.)
 - If pricing is shown as per 1000 FT (e.g. "262.00/1000 FT" or "0.6316 per 1000 FT" or price column says "PRICE PER UOM" with UOM=1000): divide by 1000 to get per-FT price. Example: 262.00/1000FT = 0.262/FT
 - If pricing is shown as "/MF" or "per MF" or "per M feet": divide by 1000. Example: $504.00/MF = $0.504/FT
@@ -539,7 +545,7 @@ CRITICAL PRICING RULES — read carefully:
     const extractedEU = ex.endUser||"";
     const allEUNames = Object.keys(S.margins);
     const matchedEU = allEUNames.find(n=>n.toLowerCase()===extractedEU.toLowerCase()) || "";
-    S.imp.review={vendor:normalizeVendor(ex.vendor)||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,listUnknown:!parseFloat(i.listPrice),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
+    S.imp.review={vendor:normalizeVendor(ex.vendor)||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,stdCost:parseFloat(i.stdCost)||0,listUnknown:!parseFloat(i.listPrice),stdCostUnknown:!parseFloat(i.stdCost),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
     S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
@@ -668,7 +674,7 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
 
   const ni=spa._ni||blankItem();
   const niGrid=h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 80px 60px 70px",gap:"6px",marginBottom:"10px"}});
-  [["Part #","partNumber","text"],["Description","description","text"],["List $/unit","listPrice","number"],["Qty","qty","number"]].forEach(([ph,f,t])=>{
+  [["Part #","partNumber","text"],["Description","description","text"],["List $/unit","listPrice","number"],["Std Cost/unit","stdCost","number"],["Qty","qty","number"]].forEach(([ph,f,t])=>{
     niGrid.appendChild(mkInp({type:t,placeholder:ph},ni[f],v=>ni[f]=v));
   });
   const uomSel=mkSel([["EA","EA - Each"],["FT","FT - Foot"],["MF","MF - 1000 Ft"],["PK","PK - Pack"],["BOX","BOX"],["ROLL","Roll"],["PR","PR - Pair"],["CTN","CTN - Carton"]],ni.uom||"EA",v=>ni.uom=v);
@@ -676,7 +682,7 @@ function spaForm(spa, onSave, onCancel, isEdit=false, aiMode=false){
   box.appendChild(niGrid);
   box.appendChild(btn("+ Add Line Item","btn btn-muted w100 mb14",()=>{
     if(!ni.partNumber||!ni.description)return;
-    spa.items=[...spa.items,{partNumber:ni.partNumber,description:ni.description,listPrice:parseFloat(ni.listPrice)||0,qty:parseInt(ni.qty)||1,uom:ni.uom||"EA"}];
+    spa.items=[...spa.items,{partNumber:ni.partNumber,description:ni.description,listPrice:parseFloat(ni.listPrice)||0,stdCost:parseFloat(ni.stdCost)||0,stdCostUnknown:!parseFloat(ni.stdCost),listUnknown:!parseFloat(ni.listPrice),qty:parseInt(ni.qty)||1,uom:ni.uom||"EA"}];
     ni.partNumber="";ni.description="";ni.listPrice="";ni.qty="";refreshLi();
   }));
 
@@ -841,11 +847,15 @@ function renderSearch(){
       irow.appendChild(it);
 
       const pr=h("div",{class:"flex gap12",style:{fontSize:"13px",flexWrap:"wrap",marginTop:"4px"}});
-      pr.appendChild(tx("List: "+(item.listUnknown?"N/A":fmtMoney(item.listPrice)+"/"+(item.uom||"EA")),{color:"#94a3b8",fontWeight:"500"}));
-      pr.appendChild(tx("Qty: "+item.qty+" "+(item.uom||"EA"),{color:"#94a3b8",fontWeight:"500"}));
-      pr.appendChild(tx("Disc: "+spa.discount+"%",{color:"#4f8ef7",fontWeight:"600"}));
-      pr.appendChild(tx("SPA: "+fmtSPA(item.listPrice*(1-spa.discount/100))+"/"+(item.uom||"EA"),{color:"#4ade80"}));
-      pr.appendChild(tx("Total: "+fmtMoney(item.listPrice*(1-spa.discount/100)*item.qty),{color:"#dde3f0",fontWeight:"600"}));
+      const uom2=item.uom||"EA";
+      const spaUnitS=item.listPrice>0?item.listPrice*(1-spa.discount/100):item.stdCost>0?item.stdCost*(1-spa.discount/100):0;
+      pr.appendChild(tx("List: "+(item.listUnknown||!item.listPrice?"N/A":fmtMoney(item.listPrice)+"/"+uom2),{color:"#64748b"}));
+      pr.appendChild(tx("Std: "+(item.stdCostUnknown||!item.stdCost?"N/A":fmtMoney(item.stdCost)+"/"+uom2),{color:"#64748b"}));
+      pr.appendChild(tx("Qty: "+item.qty+" "+uom2,{color:"#94a3b8"}));
+      // SPA price highlighted
+      const spaPill=h("span",{style:{background:"rgba(74,222,128,.1)",border:"1px solid rgba(74,222,128,.2)",borderRadius:"4px",padding:"1px 8px",fontSize:"14px",fontWeight:"800",color:"#4ade80"}},fmtSPA(spaUnitS)+"/"+uom2+" SPA");
+      pr.appendChild(spaPill);
+      pr.appendChild(tx("Total: "+fmtMoney(spaUnitS*item.qty),{color:"#dde3f0",fontWeight:"600"}));
       irow.appendChild(pr);
       card.appendChild(irow);
     });
@@ -1215,16 +1225,26 @@ function renderSPAs(allEUs){
     panel.appendChild(psWrap);
     function buildItemCard(item,thisSpa){
       const uom=item.uom||"EA";
-      const spaUnit=item.listPrice*(1-thisSpa.discount/100);
-      const ic=h("div",{class:"subcard mb5",style:{padding:"10px 12px"}});
+      const spaUnit=item.listPrice>0
+        ? item.listPrice*(1-thisSpa.discount/100)
+        : item.stdCost>0
+          ? item.stdCost*(1-thisSpa.discount/100)
+          : 0;
+      const ic=h("div",{class:"subcard mb5",style:{padding:"12px 14px"}});
       ic.appendChild(tx(item.partNumber,{fontSize:"13px",color:"#8ba9d4",fontWeight:"700",display:"block",marginBottom:"3px"}));
-      ic.appendChild(tx(item.description,{fontSize:"12px",color:"#94a3b8",display:"block",marginTop:"1px",marginBottom:"7px",lineHeight:"1.4"}));
-      const pr=h("div",{class:"flex gap8",style:{fontSize:"12px",flexWrap:"wrap"}});
-      pr.appendChild(tx("List: "+(item.listUnknown?"N/A":fmtMoney(item.listPrice)+"/"+uom),{color:"#64748b"}));
-      pr.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#64748b"}));
-      pr.appendChild(tx("SPA: "+fmtSPA(spaUnit)+"/"+uom,{color:"#4ade80",fontWeight:"600"}));
-      pr.appendChild(tx("Total: "+fmtMoney(spaUnit*item.qty),{color:"#dde3f0",fontWeight:"600"}));
-      ic.appendChild(pr);
+      ic.appendChild(tx(item.description,{fontSize:"12px",color:"#94a3b8",display:"block",marginTop:"1px",marginBottom:"9px",lineHeight:"1.4"}));
+      // Price row 1: List and Std Cost
+      const pr1=h("div",{class:"flex gap10",style:{fontSize:"12px",flexWrap:"wrap",marginBottom:"5px"}});
+      pr1.appendChild(tx("List: "+(item.listUnknown||!item.listPrice?"N/A":fmtMoney(item.listPrice)+"/"+uom),{color:"#4a5568"}));
+      pr1.appendChild(tx("Std Cost: "+(item.stdCostUnknown||!item.stdCost?"N/A":fmtMoney(item.stdCost)+"/"+uom),{color:"#4a5568"}));
+      pr1.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#64748b"}));
+      ic.appendChild(pr1);
+      // Price row 2: SPA price — bold, bright, larger — the star of the show
+      const pr2=h("div",{style:{display:"flex",alignItems:"center",gap:"12px",background:"rgba(74,222,128,.06)",border:"1px solid rgba(74,222,128,.15)",borderRadius:"6px",padding:"7px 12px",marginTop:"2px"}});
+      pr2.appendChild(h("div",{style:{fontSize:"15px",fontWeight:"800",color:"#4ade80",letterSpacing:"-.01em"}},fmtSPA(spaUnit)+"/"+uom));
+      pr2.appendChild(h("div",{style:{fontSize:"11px",color:"#94a3b8",marginLeft:"4px"}},"SPA Price"));
+      pr2.appendChild(h("div",{style:{marginLeft:"auto",fontSize:"13px",fontWeight:"600",color:"#dde3f0"}},"Total: "+fmtMoney(spaUnit*item.qty)));
+      ic.appendChild(pr2);
       return ic;
     }
     const itemsContainer=h("div",{class:"items-container"});
