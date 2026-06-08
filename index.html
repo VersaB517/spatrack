@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>SPAtrack</title>
+<title>SPAtrack — Special Pricing Agreement Manager</title>
+<meta name="description" content="SPAtrack helps sales teams manage vendor Special Pricing Agreements — track expiration dates, import SPA documents with AI, and monitor price changes across accounts."/>
+<link rel="canonical" href="https://spatrack.app"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
@@ -98,6 +100,9 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 .modal-box{background:#0d1117;border:1px solid #1e2d42;border-radius:10px;padding:24px;width:540px;max-height:90vh;overflow-y:auto;}
 .modal-box.lg{width:660px;}
 .modal-box.sm{width:360px;}
+/* SPA FOCUS MODAL */
+.spa-focus-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;z-index:550;padding:20px;}
+.spa-focus-box{background:#0d1117;border:1px solid #1e2d42;border-radius:12px;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;padding:24px;}
 
 /* GRID HELPERS */
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
@@ -252,6 +257,7 @@ let S = {
   activeVendor:'all',
   compactView:false,
   showDeleteConfirm:false, _deletingId:null, _deletingName:'',
+  showSpaFocus:false, _focusSPA:null,
   newEU:"", editEUName:"", editEUOld:"", deleteEUName:"", editSPA:null, newSPA:blankSPA(),
   apiKey:loadKey(),
   imp:{step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null},
@@ -777,6 +783,70 @@ function apiKeyModal(){
 }
 
 // ═══════════════════════════════════════════
+//  SPA FOCUS MODAL (Fix #13)
+// ═══════════════════════════════════════════
+function spaFocusModal(spa){
+  const allEUs=buildEUs(S.spas,S.margins);
+  const color=euCol(spa.endUser,allEUs);
+  const st=ST[spa.status];
+  const bd=h("div",{class:"spa-focus-backdrop"});
+  bd.addEventListener("click",e=>{if(e.target===bd){S.showSpaFocus=false;S._focusSPA=null;render();}});
+  const box=h("div",{class:"spa-focus-box fadein"});
+  // Header
+  const ph=h("div",{class:"flex mb12",style:{justifyContent:"space-between",alignItems:"start"}});
+  const pt=h("div");
+  pt.appendChild(tx(spa.vendor,{fontFamily:"'Syne',sans-serif",fontSize:"20px",fontWeight:"800",display:"block",color:"#f1f5f9"}));
+  pt.appendChild(tx(spa.spaNumber,{fontSize:"13px",color:"#8ba9d4",display:"block",marginTop:"4px",fontWeight:"500"}));
+  ph.appendChild(pt);
+  ph.appendChild(btn("✕ Close","btn btn-ghost",()=>{S.showSpaFocus=false;S._focusSPA=null;render();}));
+  box.appendChild(ph);
+  // Account + status + expiry
+  const pillRow=h("div",{class:"flex gap8 mb14",style:{alignItems:"center",flexWrap:"wrap"}});
+  pillRow.appendChild(h("span",{style:{background:color+"22",color:color,border:"1px solid "+color+"44",borderRadius:"20px",padding:"3px 12px",fontSize:"13px",fontWeight:"700"}},spa.endUser));
+  pillRow.appendChild(badge(st.label,st.color,st.bg));
+  const days=daysUntil(spa.expiration);
+  pillRow.appendChild(tx(fmtDate(spa.expiration)+" · "+(days<0?Math.abs(days)+"d ago":days===0?"Today":days+"d left"),{fontSize:"13px",color:st.color,fontWeight:"600"}));
+  box.appendChild(pillRow);
+  // Meta grid
+  const meta=h("div",{class:"g2 mb14"});
+  [[spa.discount+"%","Discount","#4f8ef7"],[spa.category,"Category","#8ba9d4"]].forEach(([val,lb,c])=>{
+    const mc=h("div",{class:"subcard",style:{padding:"8px 10px"}});
+    mc.appendChild(h("div",{class:"stat-label mb4"},lb));
+    mc.appendChild(tx(val,{fontSize:"12px",fontWeight:"600",color:c}));
+    meta.appendChild(mc);
+  });
+  box.appendChild(meta);
+  // Line items
+  box.appendChild(h("div",{style:{fontSize:"12px",fontWeight:"700",color:"#94a3b8",letterSpacing:".08em",textTransform:"uppercase",marginBottom:"10px"}},"Line Items"));
+  const itemsWrap=h("div",{class:"flex-col gap6"});
+  spa.items.forEach(item=>{
+    const uom=item.uom||"EA";
+    const spaUnit=item.listPrice>0?item.listPrice*(1-spa.discount/100):item.stdCost>0?item.stdCost*(1-spa.discount/100):0;
+    const ic=h("div",{class:"subcard",style:{padding:"12px 14px"}});
+    ic.appendChild(tx(item.partNumber,{fontSize:"13px",color:"#8ba9d4",fontWeight:"700",display:"block",marginBottom:"3px"}));
+    ic.appendChild(tx(item.description,{fontSize:"12px",color:"#94a3b8",display:"block",marginBottom:"8px",lineHeight:"1.4"}));
+    const pr1=h("div",{class:"flex gap10 mb6",style:{fontSize:"12px",flexWrap:"wrap"}});
+    pr1.appendChild(tx("List: "+(item.listUnknown||!item.listPrice?"N/A":fmtMoney(item.listPrice)+"/"+uom),{color:"#4a5568"}));
+    pr1.appendChild(tx("Std: "+(item.stdCostUnknown||!item.stdCost?"N/A":fmtMoney(item.stdCost)+"/"+uom),{color:"#4a5568"}));
+    pr1.appendChild(tx("Qty: "+item.qty+" "+uom,{color:"#64748b"}));
+    ic.appendChild(pr1);
+    const pr2=h("div",{style:{display:"flex",alignItems:"center",gap:"12px",background:"rgba(74,222,128,.06)",border:"1px solid rgba(74,222,128,.15)",borderRadius:"6px",padding:"7px 12px"}});
+    pr2.appendChild(h("div",{style:{fontSize:"15px",fontWeight:"800",color:"#4ade80"}},fmtSPA(spaUnit)+"/"+uom));
+    pr2.appendChild(h("div",{style:{fontSize:"11px",color:"#94a3b8",marginLeft:"4px"}},"SPA Price"));
+    pr2.appendChild(h("div",{style:{marginLeft:"auto",fontSize:"13px",fontWeight:"600",color:"#dde3f0"}},"Total: "+fmtMoney(spaUnit*item.qty)));
+    ic.appendChild(pr2);
+    itemsWrap.appendChild(ic);
+  });
+  box.appendChild(itemsWrap);
+  // Footer — open full SPA
+  const footer=h("div",{class:"flex",style:{justifyContent:"flex-end",marginTop:"16px"}});
+  footer.appendChild(btn("Open Full SPA →","btn btn-muted",()=>{S.showSpaFocus=false;S._focusSPA=null;set({selSPA:spa,view:"spas",searchQ:""});}));
+  box.appendChild(footer);
+  bd.appendChild(box);
+  return bd;
+}
+
+// ═══════════════════════════════════════════
 //  SEARCH RESULTS VIEW
 // ═══════════════════════════════════════════
 function renderSearch(){
@@ -864,7 +934,7 @@ function renderSearch(){
       card.appendChild(tx((spa.items.length-matched.length)+" other item"+(spa.items.length-matched.length!==1?"s":"")+" in this SPA",{fontSize:"12px",color:"#64748b",display:"block",marginTop:"4px"}));
     }
 
-    const viewBtn=btn("View SPA →","btn btn-ghost",()=>{set({selSPA:spa,view:"spas",searchQ:""});});
+    const viewBtn=btn("View SPA →","btn btn-ghost",()=>{S.showSpaFocus=true;S._focusSPA=spa;render();});
     viewBtn.style.marginTop="8px";
     card.appendChild(viewBtn);
     wrap.appendChild(card);
@@ -939,8 +1009,16 @@ function renderDashboard(allEUs){
 
   // stats
   const sg=h("div",{class:"stat-grid"});
-  [["Total SPAs",stats.total,"#4f8ef7"],["Active",stats.active,"#4ade80"],["Expiring ≤14d",stats.expiring,"#fbbf24"],["Expired",stats.expired,"#f87171"]].forEach(([l,v,c])=>{
-    const sc=h("div",{class:"stat-card"});
+  [
+    ["Total SPAs",stats.total,"#4f8ef7","dashboard","all"],
+    ["Active",stats.active,"#4ade80","spas","active"],
+    ["Expiring ≤14d",stats.expiring,"#fbbf24","spas","expiring"],
+    ["Expired",stats.expired,"#f87171","spas","expired"]
+  ].forEach(([l,v,c,view,filterSt])=>{
+    const sc=h("div",{class:"stat-card",style:{cursor:"pointer",transition:"border-color .15s, background .15s"}});
+    sc.addEventListener("mouseenter",()=>{sc.style.borderColor=c;sc.style.background="#111827";});
+    sc.addEventListener("mouseleave",()=>{sc.style.borderColor="";sc.style.background="";});
+    sc.addEventListener("click",()=>set({view,filterSt,searchQ:"",activeVendor:"all",selSPA:null}));
     sc.appendChild(h("div",{class:"stat-label"},l));
     sc.appendChild(h("div",{class:"syne stat-val",style:{color:c}},String(v)));
     sg.appendChild(sc);
@@ -1516,6 +1594,7 @@ function render(){
   // ── MODALS ──
   if(S.showImport)  app.appendChild(importModal());
   if(S.showApiKey)  app.appendChild(apiKeyModal());
+  if(S.showSpaFocus&&S._focusSPA) app.appendChild(spaFocusModal(S._focusSPA));
 
   if(S.showAdd||S.showEdit){
     const spa=S.showEdit?S.editSPA:{...S.newSPA,_ni:blankItem()};
