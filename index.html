@@ -460,7 +460,205 @@ async function doExtract() {
   if(!S.apiKey){alert("Please set your Anthropic API key first.");return;}
   S.imp.busy=true;S.imp.step="extracting";render();
 
-  const prompt=`You are parsing a Special Pricing Agreement (SPA) or price quote document. Extract all data and return ONLY a valid JSON object (no markdown, no explanation):
+  // ── VENDOR PROFILES ──
+  // Detect vendor from filename or let AI detect from content
+  const fname=(S.imp.name||"").toLowerCase();
+  let vendorHint="";
+  if(fname.includes("belden"))           vendorHint="BELDEN";
+  else if(fname.includes("panduit"))     vendorHint="PANDUIT";
+  else if(fname.includes("corning"))     vendorHint="CORNING";
+  else if(fname.includes("prysmian"))    vendorHint="PRYSMIAN";
+  else if(fname.includes("commscope")||fname.includes("comm_scope")) vendorHint="COMMSCOPE";
+  else if(fname.includes("eaton"))       vendorHint="EATON";
+  else if(fname.includes("siemon"))      vendorHint="SIEMON";
+  else if(fname.includes("hubbell"))     vendorHint="HUBBELL";
+  else if(fname.includes("apc"))         vendorHint="APC";
+  else if(fname.includes("cpi")||fname.includes("chatsworth")) vendorHint="CPI";
+  else if(fname.includes("leviton"))     vendorHint="LEVITON";
+  else if(fname.includes("berktek")||fname.includes("berk-tek")||fname.includes("berk_tek")) vendorHint="BERKTEK";
+  else if(fname.includes("superior")||fname.includes("essex")) vendorHint="SUPERIORESSEX";
+  else if(fname.includes("hoffman")||fname.includes("nvent")) vendorHint="HOFFMAN";
+  else if(fname.includes("vertiv"))      vendorHint="VERTIV";
+  else if(fname.includes("raritan"))     vendorHint="LEGRAND_RARITAN";
+  else if(fname.includes("wiremold"))    vendorHint="LEGRAND_WIREMOLD";
+  else if(fname.includes("ortronics"))   vendorHint="LEGRAND_ORTRONICS";
+  else if(fname.includes("cablofil"))    vendorHint="LEGRAND_CABLOFIL";
+  else if(fname.includes("middle") || fname.includes("midatl")) vendorHint="LEGRAND_MIDDLEATL";
+
+  // ── VENDOR-SPECIFIC INSTRUCTIONS ──
+  const vendorProfiles = {
+    BELDEN: `VENDOR: BELDEN
+- End user field: look for "Customer" or "End User"
+- SPA number: top right corner labeled "Price Agreement Number" or similar reference number
+- Pricing: ONE price column only — this IS the SPA price already. Set listPrice=0, stdCost=0, discount=0
+- UOM: use exactly as shown — FT or EA. Pricing is already per foot, no conversion needed
+- Category: Cabling`,
+
+    PANDUIT: `VENDOR: PANDUIT
+- End user field: look for "REF" followed by customer name — extract name after REF
+- SPA number: labeled "Quotation No." or "Quotation NO." — extract number after it
+- Pricing: ONE price column only — this IS the SPA price. Set listPrice=0, stdCost=0, discount=0
+- UOM conversions: PC→EA, RL→ROLL, KT→EA, FT cable→pricing is per 1000ft so DIVIDE BY 1000 to get per-foot price, store as FT
+- SKIP any row where UOM column shows a % sign — these are category discount rows, do not extract them
+- SKIP any row that has no part number — category header rows only`,
+
+    CORNING: `VENDOR: CORNING OPTICAL COMMUNICATIONS
+- End user field: labeled "Project Reference"
+- SPA number: labeled "Quote Number"
+- Pricing: TWO price columns — "Standard Price" = stdCost, "Quoted Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100), round to 1 decimal
+- listPrice: set to 0 (not shown)
+- UOM: Per Thousand Feet → divide price by 1000, store as FT. PCE→EA
+- LENGTH ADDER: if a per-foot or per-meter adder column exists, append to description: "+ $X.XX/FT length adder — verify final price". Affects part numbers ending in 1M, 2M, 3M etc.
+- Category: Fiber`,
+
+    PRYSMIAN: `VENDOR: PRYSMIAN
+- End user field: labeled "Job"
+- SPA number: labeled "Quote"
+- Pricing: ONE price column — this IS the SPA price per 1000ft. DIVIDE ALL PRICES BY 1000 to get per-foot price
+- Set listPrice=0, stdCost=0, discount=0. Store UOM as FT
+- Category: Cabling`,
+
+    COMMSCOPE: `VENDOR: COMMSCOPE
+- End user field: labeled "Customer" or "End User"
+- SPA number: labeled "Quote Number"
+- Pricing: TWO columns — "Standard Cost" = stdCost, "Approved Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100)
+- listPrice: set to 0
+- UOM: Foot→FT, Piece→EA, PC→EA, Each→EA, PK→PK`,
+
+    EATON: `VENDOR: EATON
+- End user field: labeled "Transaction Name"
+- SPA number: labeled "Transaction Number"
+- Pricing: THREE columns — "List Price" = listPrice, "Net Price" = stdCost, "Unit Price" = SPA price
+- discount: auto-calculate from listPrice → SPA price per line
+- UOM: EA (each) — primarily hardware
+- Category: Infrastructure`,
+
+    SIEMON: `VENDOR: SIEMON
+- End user field: labeled "Quote Name"
+- SPA number: labeled "Quote Number"
+- Pricing: TWO columns — "Standard Pricing" = stdCost, "Project Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100)
+- listPrice: set to 0
+- UOM: EA
+- Category: Cabling`,
+
+    HUBBELL: `VENDOR: HUBBELL
+- End user field: labeled "Territory Information" — extract customer name from that section
+- SPA number: top right corner labeled "Quotation" followed by number
+- Pricing: TWO columns — "Price" = stdCost, "Net Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100)
+- listPrice: set to 0
+- UOM: Each→EA, Pack→PK
+- Category: Connectivity`,
+
+    APC: `VENDOR: APC BY SCHNEIDER ELECTRIC
+- End user field: labeled "Prepared For"
+- SPA number: labeled "Quote Number"
+- Pricing: TWO columns — "Start Price" = stdCost, "Net Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100)
+- listPrice: set to 0
+- UOM: not shown on document — default all items to EA
+- Category: Infrastructure`,
+
+    CPI: `VENDOR: CPI / CHATSWORTH PRODUCTS
+- End user field: labeled "Project"
+- SPA number: labeled "Quote Number Rev" — include revision number
+- Pricing: TWO columns — "Unit Price" = stdCost, "Project Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100)
+- listPrice: set to 0
+- UOM: not shown — default all items to EA
+- Category: Racks`,
+
+    LEVITON: `VENDOR: LEVITON
+- End user field: labeled "Project Name"
+- SPA number: labeled "Quote Number"
+- Pricing: ONE column — "Project Price" = SPA price. Set listPrice=0, stdCost=0, discount=0
+- UOM: not shown — default all items to EA
+- Category: Connectivity`,
+
+    BERKTEK: `VENDOR: BERK-TEK
+- End user field: labeled "Job Name"
+- SPA number: labeled "BOSS Quote Number"
+- Pricing: ONE column — "Approved Price" = SPA price per 1000ft. DIVIDE ALL PRICES BY 1000 to get per-foot price
+- Set listPrice=0, stdCost=0, discount=0. Store UOM as FT
+- Category: Cabling`,
+
+    SUPERIORESSEX: `VENDOR: SUPERIOR ESSEX
+- End user field: labeled "Project Name"
+- SPA number: labeled "Quote Number"
+- Pricing: ONE column — "Unit Price" = SPA price per 1000ft. DIVIDE ALL PRICES BY 1000 to get per-foot price
+- Set listPrice=0, stdCost=0, discount=0. Store UOM as FT
+- Category: Cabling`,
+
+    HOFFMAN: `VENDOR: HOFFMAN / NVENT
+- End user field: labeled "Name"
+- SPA number: labeled "SPA Number"
+- Pricing: NO dollar pricing — document shows "Requested Multiplier" as a decimal (e.g. 0.45) per part number
+- For each part: set listPrice=0, stdCost=0, discount=0
+- Store the multiplier in the description field appended as: "+ Multiplier: [value] — Price = List × [value], look up list in CORE"
+- UOM: EA
+- Category: Enclosures`,
+
+    VERTIV: `VENDOR: VERTIV
+- End user field: labeled "Project"
+- SPA number: labeled "Proposal Number" — also look for "Project Reg Number" and append as "/ Reg: [number]"
+- Pricing: TWO columns — "Unit Price" = stdCost, "Net Price" = SPA price
+- discount: auto-calculate per line as ((stdCost - spaPrice) / stdCost * 100)
+- listPrice: set to 0
+- UOM: EA
+- Category: Infrastructure`,
+
+    LEGRAND_MIDDLEATL: `VENDOR: LEGRAND / MIDDLE ATLANTIC
+- End user field: NOT on document — leave endUser blank, user will select manually
+- SPA number: labeled "Sales Quote Number"
+- Pricing: ONE column = SPA price. Set listPrice=0, stdCost=0, discount=0
+- UOM: EA
+- Category: Infrastructure`,
+
+    LEGRAND_ORTRONICS: `VENDOR: LEGRAND / ORTRONICS
+- End user field: labeled "Reference"
+- SPA number: labeled "Quote Number"
+- Pricing: ONE column = SPA price. Set listPrice=0, stdCost=0, discount=0
+- UOM: EA
+- Category: Connectivity`,
+
+    LEGRAND_WIREMOLD: `VENDOR: LEGRAND / WIREMOLD
+- End user field: labeled "Job Name"
+- SPA number: labeled "Quote Number"
+- Pricing: ONE column = SPA price. Set listPrice=0, stdCost=0, discount=0
+- UOM: Each→EA, Foot→FT
+- Category: Infrastructure`,
+
+    LEGRAND_CABLOFIL: `VENDOR: LEGRAND / CABLOFIL
+- End user field: labeled "Job Name"
+- SPA number: labeled "Quote Number"
+- Pricing: ONE column = SPA price. Set listPrice=0, stdCost=0, discount=0
+- UOM: Pieces→EA
+- Category: Infrastructure`,
+
+    LEGRAND_RARITAN: `VENDOR: LEGRAND / RARITAN
+- End user field: labeled "Account Name"
+- SPA number: labeled "Quote Number"
+- Pricing: TWO columns — "List Price" = listPrice, "Unit Price" = SPA price
+- discount: auto-calculate per line as ((listPrice - spaPrice) / listPrice * 100)
+- stdCost: set to 0
+- UOM: EA
+- Category: Infrastructure`,
+  };
+
+  // Build vendor-specific instructions
+  const vendorInstructions = vendorHint && vendorProfiles[vendorHint]
+    ? `
+
+VENDOR-SPECIFIC INSTRUCTIONS — follow these exactly for this document:
+${vendorProfiles[vendorHint]}`
+    : `
+
+No specific vendor detected from filename — use general rules below and detect vendor from document content.`;
+
+  const prompt=`You are parsing a Special Pricing Agreement (SPA) or price quote document for a network infrastructure distributor. Extract all data and return ONLY a valid JSON object (no markdown, no explanation):
 {
   "vendor": "manufacturer name",
   "endUser": "end-user customer name",
@@ -468,24 +666,22 @@ async function doExtract() {
   "discount": 0,
   "expiration": "YYYY-MM-DD",
   "category": "Cabling|Fiber|Enclosures|Racks|Connectivity|Infrastructure|Other",
-  "items": [{"partNumber":"","description":"","listPrice":0.00,"stdCost":0.00,"qty":1,"uom":"FT"}]
+  "items": [{"partNumber":"","description":"","listPrice":0.00,"stdCost":0.00,"qty":1,"uom":"EA"}]
 }
+${vendorInstructions}
 
-CRITICAL PRICING RULES — read carefully:
-- If the document only shows ONE price per item with no list/standard cost column: set listPrice to 0, stdCost to 0, and put the SPA price in as the item price at 0% discount.
-- If the document shows TWO prices (like Corning Standard Price + Quoted Price): set stdCost = Standard Price, listPrice = 0, and calculate discount = ((stdCost - quotedPrice) / stdCost * 100).
-- listPrice = manufacturer published LIST price per unit (if shown). If only one price shown, set listPrice to 0.
-- stdCost = standard/distributor cost per unit (e.g. Corning "Standard Price" column). If not shown, set to 0.
-- spaPrice is NOT a field — the SPA price is calculated from listPrice and discount, or use stdCost as base if that is what is shown.
-- listPrice must ALWAYS be the price per single unit (per 1 FT, per 1 EA, etc.)
-- If pricing is shown as per 1000 FT (e.g. "262.00/1000 FT" or "0.6316 per 1000 FT" or price column says "PRICE PER UOM" with UOM=1000): divide by 1000 to get per-FT price. Example: 262.00/1000FT = 0.262/FT
-- If pricing is shown as "/MF" or "per MF" or "per M feet": divide by 1000. Example: $504.00/MF = $0.504/FT
-- If the document has columns like "ORD QTY UOM" showing 1000 and "PRICE PER UOM": the price shown is per 1000 units — divide by 1000
-- uom should always be the base unit: use FT (not MF or /1000FT), EA, PK, BOX, ROLL, PR, CTN
-- qty is the total quantity ordered (e.g. 100000 FT, 50000 FT)
-- discount: if individual item prices are already the SPA prices (no separate list price shown), set discount to 0
-- expiration: use the Agreement End Date or expiration date. Format YYYY-MM-DD
-- Use 0 for missing numbers, "" for missing strings. items=[] if none found.`;
+GENERAL PRICING RULES (apply when no vendor-specific instructions override):
+- listPrice = manufacturer published LIST price per unit. Set to 0 if not shown.
+- stdCost = distributor standard cost per unit. Set to 0 if not shown.
+- SPA price is NOT stored directly — it is calculated from (listPrice or stdCost) × (1 - discount/100)
+- If only ONE price shown: that IS the SPA price. Set listPrice=0, stdCost=0, discount=0, and store that price as listPrice temporarily so calculations work — actually set it as stdCost=0, listPrice=that price, discount=0
+- Wait — CORRECTION: if only one price shown set listPrice=0, stdCost=0, discount=0 and store the single price directly as listPrice with discount=0 so SPA price = listPrice × 1.0
+- Per 1000ft pricing: if price is per 1000ft or per MF, DIVIDE BY 1000 to get per-foot price, store UOM as FT
+- UOM: always store as base unit — FT, EA, PK, ROLL, BOX. Convert PC→EA, PCE→EA, Piece→EA
+- expiration: Agreement End Date or Valid To date. Format YYYY-MM-DD. If not found use ""
+- qty: total quantity on the line item
+- Skip category/header rows with no part number
+- Use 0 for missing numbers, "" for missing strings`;
 
   try {
     let messageContent;
