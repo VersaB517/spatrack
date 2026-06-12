@@ -477,6 +477,14 @@ function extractJsonObject(txt){
   return txt.slice(start);
 }
 
+// Coerce an AI-supplied price/qty to a number, tolerating strings like
+// "$1,234.50", "1 234,50" leftovers, or stray units. Returns 0 if unparseable.
+function toNum(v){
+  if(typeof v==="number") return isFinite(v)?v:0;
+  if(typeof v==="string"){ const n=parseFloat(v.replace(/[^0-9.\-]/g,"")); return isFinite(n)?n:0; }
+  return 0;
+}
+
 async function doExtract() {
   S.imp.busy=true;S.imp.step="extracting";render();
 
@@ -510,14 +518,14 @@ async function doExtract() {
     BELDEN: `VENDOR: BELDEN
 - End user field: look for "Customer" or "End User"
 - SPA number: top right corner labeled "Price Agreement Number" or similar reference number
-- Pricing: ONE price column only — this IS the SPA price already. Set listPrice=0, stdCost=0, discount=0
+- Pricing: ONE price column only — this IS the SPA price. Store that price as listPrice (a plain number), set stdCost=0 and discount=0, so SPA price = listPrice. NEVER set listPrice to 0 when a price is shown.
 - UOM: use exactly as shown — FT or EA. Pricing is already per foot, no conversion needed
 - Category: Cabling`,
 
     PANDUIT: `VENDOR: PANDUIT
 - End user field: look for "REF" followed by customer name — extract name after REF
 - SPA number: labeled "Quotation No." or "Quotation NO." — extract number after it
-- Pricing: ONE price column only — this IS the SPA price. Set listPrice=0, stdCost=0, discount=0
+- Pricing: ONE price column only — this IS the SPA price. Store that price as listPrice (a plain number), set stdCost=0 and discount=0, so SPA price = listPrice. NEVER set listPrice to 0 when a price is shown.
 - UOM conversions: PC→EA, RL→ROLL, KT→EA, FT cable→pricing is per 1000ft so DIVIDE BY 1000 to get per-foot price, store as FT
 - SKIP any row where UOM column shows a % sign — these are category discount rows, do not extract them
 - SKIP any row that has no part number — category header rows only`,
@@ -694,8 +702,8 @@ GENERAL PRICING RULES (apply when no vendor-specific instructions override):
 - listPrice = manufacturer published LIST price per unit. Set to 0 if not shown.
 - stdCost = distributor standard cost per unit. Set to 0 if not shown.
 - SPA price is NOT stored directly — it is calculated from (listPrice or stdCost) × (1 - discount/100)
-- If only ONE price shown: that IS the SPA price. Set listPrice=0, stdCost=0, discount=0, and store that price as listPrice temporarily so calculations work — actually set it as stdCost=0, listPrice=that price, discount=0
-- Wait — CORRECTION: if only one price shown set listPrice=0, stdCost=0, discount=0 and store the single price directly as listPrice with discount=0 so SPA price = listPrice × 1.0
+- If only ONE price column is shown, that IS the SPA price: store it as listPrice, set stdCost=0 and discount=0, so SPA price = listPrice × 1.0. Do NOT set listPrice to 0 when a price is shown.
+- All price fields (listPrice, stdCost) must be plain JSON numbers — never strings. Strip any "$", thousands separators, or units (e.g. "$1,234.50" → 1234.50)
 - Per 1000ft pricing: if price is per 1000ft or per MF, DIVIDE BY 1000 to get per-foot price, store UOM as FT
 - UOM: always store as base unit — FT, EA, PK, ROLL, BOX. Convert PC→EA, PCE→EA, Piece→EA
 - expiration: Agreement End Date or Valid To date. Format YYYY-MM-DD. If not found use ""
@@ -788,7 +796,7 @@ GENERAL PRICING RULES (apply when no vendor-specific instructions override):
     const extractedEU = ex.endUser||"";
     const allEUNames = Object.keys(S.margins);
     const matchedEU = allEUNames.find(n=>n.toLowerCase()===extractedEU.toLowerCase()) || "";
-    S.imp.review={vendor:normalizeVendor(ex.vendor)||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,stdCost:parseFloat(i.stdCost)||0,listUnknown:!parseFloat(i.listPrice),stdCostUnknown:!parseFloat(i.stdCost),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
+    S.imp.review={vendor:normalizeVendor(ex.vendor)||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:toNum(i.listPrice),stdCost:toNum(i.stdCost),listUnknown:!toNum(i.listPrice),stdCostUnknown:!toNum(i.stdCost),qty:toNum(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
     S.imp.step="upload";S.imp.busy=false;
