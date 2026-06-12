@@ -182,7 +182,6 @@ html,body{height:100%;background:#07090f;color:#dde3f0;font-family:'DM Sans',san
 // ═══════════════════════════════════════════
 const EXPIRING_DAYS = 14;
 const EU_COLORS = ["#4f8ef7","#a78bfa","#f472b6","#2dd4bf","#fb923c","#a3e635","#facc15","#38bdf8"];
-const APIKEY_KEY = "spatrackApiKey2";
 
 // ═══════════════════════════════════════════
 //  DATA LAYER  (swap apiGet/Post/Put/Del for Option 3)
@@ -240,8 +239,6 @@ function buildEUs(spas,margins) {
 }
 function blankSPA()  { return {vendor:"",endUser:"",spaNumber:"",discount:"",expiration:"",category:"",items:[],docUrl:"",_ni:blankItem()}; }
 function blankItem() { return {partNumber:"",description:"",listPrice:"",stdCost:"",qty:"",uom:"EA"}; }
-function loadKey()   { try{return window.__ANTHROPIC_KEY||localStorage.getItem(APIKEY_KEY)||""; }catch(e){return "";} }
-function saveKey(k)  { try{localStorage.setItem(APIKEY_KEY,k);}catch(e){} }
 
 const ST = {
   active:   {color:"#4ade80",bg:"#052010",label:"Active"},
@@ -260,13 +257,12 @@ let S = {
   view:"dashboard", activeEU:"all", selSPA:null,
   filterSt:"all", sortBy:"expiration",
   searchQ:"",
-  showAdd:false, showEdit:false, showAddEU:false, showEditEU:false, showDeleteEU:false, showClear:false, showApiKey:false, showImport:false,
+  showAdd:false, showEdit:false, showAddEU:false, showEditEU:false, showDeleteEU:false, showClear:false, showImport:false,
   activeVendor:'all',
   compactView:false,
   showDeleteConfirm:false, _deletingId:null, _deletingName:'',
   showSpaFocus:false, _focusSPA:null,
   newEU:"", editEUName:"", editEUOld:"", deleteEUName:"", editSPA:null, newSPA:blankSPA(),
-  apiKey:loadKey(),
   imp:{step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null},
   toast:null,
 };
@@ -463,8 +459,25 @@ async function handleFile(file) {
   reader.readAsDataURL(file);
 }
 
+// Isolate the first complete JSON object from a model response that may be
+// wrapped in prose or ``` fences. Scans from the first "{" to its matching "}"
+// (string-aware). Returns from "{" to end if never closed, so the truncation
+// repair below can still balance brackets.
+function extractJsonObject(txt){
+  const start=txt.indexOf("{");
+  if(start<0) return txt;
+  let depth=0,inStr=false,esc=false;
+  for(let i=start;i<txt.length;i++){
+    const ch=txt[i];
+    if(inStr){ if(esc)esc=false; else if(ch==="\\")esc=true; else if(ch==='"')inStr=false; }
+    else if(ch==='"') inStr=true;
+    else if(ch==="{") depth++;
+    else if(ch==="}"){ if(--depth===0) return txt.slice(start,i+1); }
+  }
+  return txt.slice(start);
+}
+
 async function doExtract() {
-  if(!S.apiKey){alert("Please set your Anthropic API key first.");return;}
   S.imp.busy=true;S.imp.step="extracting";render();
 
   // ── VENDOR PROFILES ──
@@ -720,14 +733,34 @@ GENERAL PRICING RULES (apply when no vendor-specific instructions override):
       }
     }
 
-    const resp=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":S.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-opus-4-5",max_tokens:16000,messages:[{role:"user",content:messageContent}]})
-    });
-    if(!resp.ok){const e=await resp.json();throw new Error(e.error?.message||"API error "+resp.status);}
+    // Extraction can fail on a cold start or a transient API hiccup. Auto-retry
+    // once (only for network errors or transient responses) so the user doesn't
+    // have to manually click Extract again. Non-transient errors fail immediately.
+    let resp,lastErr;
+    for(let attempt=0;attempt<2;attempt++){
+      let netErr=false;
+      try{
+        resp=await fetch("/api/extract",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({messageContent})
+        });
+      }catch(err){ netErr=true; lastErr=err; }
+      if(!netErr){
+        if(resp.ok) break;
+        const e=await resp.json().catch(()=>({}));
+        lastErr=new Error(e.error||"API error "+resp.status);
+        const transient = e.retryable || resp.status>=500 || resp.status===429;
+        if(!transient) throw lastErr;
+      }
+      // network error, or transient response: retry once then give up
+      if(attempt===0){ await new Promise(r=>setTimeout(r,1500)); continue; }
+      throw lastErr;
+    }
     const data=await resp.json();
-    let raw=data.content.map(c=>c.text||"").join("").trim().replace(/^```json\s*/,"").replace(/^```\s*/,"").replace(/\s*```$/,"").trim();
+    const aiText=data.content.map(c=>c.text||"").join("").trim();
+    // Model may wrap the JSON in prose or ``` fences — isolate the object.
+    let raw=extractJsonObject(aiText);
     // Attempt to repair truncated JSON from large PDFs
     let ex;
     try {
@@ -747,7 +780,8 @@ GENERAL PRICING RULES (apply when no vendor-specific instructions override):
         ex=JSON.parse(fixed);
         toast("⚠ Large document — partial extraction saved. Review carefully.","ok",6000);
       } catch(e2) {
-        throw new Error("Could not parse AI response. Document may be too large or complex. Try splitting into smaller sections.");
+        console.error("AI extraction — unparseable response:",aiText);
+        throw new Error("Could not parse AI response (received: "+JSON.stringify(aiText.slice(0,80))+"…). Please try again — if it persists, the document may be too large or complex.");
       }
     }
     // Try to match extracted endUser to existing accounts, otherwise leave blank for manual selection
@@ -757,7 +791,8 @@ GENERAL PRICING RULES (apply when no vendor-specific instructions override):
     S.imp.review={vendor:normalizeVendor(ex.vendor)||"",endUser:matchedEU,spaNumber:ex.spaNumber||"",discount:String(ex.discount||""),expiration:ex.expiration||"",category:ex.category||"",items:(ex.items||[]).map(i=>({partNumber:i.partNumber||"",description:i.description||"",listPrice:parseFloat(i.listPrice)||0,stdCost:parseFloat(i.stdCost)||0,listUnknown:!parseFloat(i.listPrice),stdCostUnknown:!parseFloat(i.stdCost),qty:parseInt(i.qty)||1,uom:i.uom||"EA"})),_ni:blankItem(),_extractedEU:extractedEU};
     S.imp.step="review";S.imp.busy=false;
   } catch(e){
-    S.imp.step="upload";S.imp.busy=false;S.imp.err="Extraction failed: "+e.message;
+    S.imp.step="upload";S.imp.busy=false;
+    S.imp.err="Extraction failed: "+e.message+" Click “Extract with AI” to try again — large PDFs are the usual cause, so a smaller or text-based file may work better.";
   }
   render();
 }
@@ -963,26 +998,6 @@ function importModal(){
   const exBtn=btn("","btn btn-ai",doExtract,!imp.b64);
   exBtn.appendChild(h("span",{},"✦ Extract with AI"));exBtn.style.flex="2";
   br.appendChild(exBtn);box.appendChild(br);bd.appendChild(box);return bd;
-}
-
-// ═══════════════════════════════════════════
-//  API KEY MODAL
-// ═══════════════════════════════════════════
-function apiKeyModal(){
-  const bd=h("div",{class:"modal-backdrop"});
-  bd.addEventListener("click",e=>{if(e.target===bd)set({showApiKey:false});});
-  const box=h("div",{class:"modal-box sm fadein"});
-  box.appendChild(h("div",{class:"syne mb4",style:{fontSize:"15px",fontWeight:"700"}},"Anthropic API Key"));
-  box.appendChild(h("div",{class:"text-muted mb14",style:{fontSize:"11px"}},"Required for AI file extraction. Get your key at ",h("a",{href:"https://console.anthropic.com",target:"_blank",style:{color:"#5b21b6"}},"console.anthropic.com"),"."));
-  let tmp=S.apiKey;
-  const inp=mkInp({type:"password",placeholder:"sk-ant-...",style:{marginBottom:"8px",fontFamily:"monospace"}},S.apiKey,v=>tmp=v);
-  box.appendChild(lbl("API Key")); box.appendChild(inp);
-  box.appendChild(h("div",{style:{fontSize:"10px",marginBottom:"14px",color:S.apiKey?"#4ade80":"#4a5568"}},S.apiKey?"✓ Key saved":"No key saved"));
-  const br=h("div",{class:"flex gap8"});
-  if(S.apiKey){const cb=btn("Remove","btn btn-ghost",()=>{S.apiKey="";saveKey("");render();});cb.style.color="#f87171";br.appendChild(cb);}
-  else br.appendChild(btn("Cancel","btn btn-ghost",()=>set({showApiKey:false})));
-  const sb=btn("Save Key","btn btn-primary",()=>{S.apiKey=tmp.trim();saveKey(S.apiKey);set({showApiKey:false});});
-  sb.style.flex="2";br.appendChild(sb);box.appendChild(br);bd.appendChild(box);return bd;
 }
 
 // ═══════════════════════════════════════════
@@ -1697,8 +1712,7 @@ function render(){
   });
   const nr=h("div",{class:"nav-right"});
   if(alerts.length>0) nr.appendChild(h("div",{class:"alert-pill"},"⚠ "+alerts.length+" ALERT"+(alerts.length>1?"S":"")));
-  nr.appendChild(btn("✦ Import File","btn btn-ai",()=>{if(!S.apiKey){set({showApiKey:true});return;}S.imp={step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null};set({showImport:true});}));
-  nr.appendChild(btn("⚙","btn btn-ghost",()=>set({showApiKey:true})));
+  nr.appendChild(btn("✦ Import File","btn btn-ai",()=>{S.imp={step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null};set({showImport:true});}));
   nr.appendChild(btn("+ Add SPA","btn btn-primary",()=>set({showAdd:true,newSPA:blankSPA()})));
   nav.appendChild(nr);
   app.appendChild(nav);
@@ -1798,7 +1812,6 @@ function render(){
 
   // ── MODALS ──
   if(S.showImport)  app.appendChild(importModal());
-  if(S.showApiKey)  app.appendChild(apiKeyModal());
   if(S.showSpaFocus&&S._focusSPA) app.appendChild(spaFocusModal(S._focusSPA));
 
   if(S.showAdd||S.showEdit){

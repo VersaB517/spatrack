@@ -1,6 +1,10 @@
 {
+  "functions": {
+    "api/extract.js": { "maxDuration": 60 }
+  },
   "routes": [
     { "src": "/api/spas", "dest": "/api/spas.js" },
+    { "src": "/api/extract", "dest": "/api/extract.js" },
     { "src": "/api/margins", "dest": "/api/margins.js" },
     { "src": "/api/history", "dest": "/api/history.js" },
     { "src": "/(.*)", "dest": "/index.html" }
