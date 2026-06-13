@@ -1,11 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
+const { requireAuth } = require('./_auth');
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (!(await requireAuth(req, res))) return;
   try {
     if (req.method === 'GET') {
       const { data, error } = await supabase.from('margins').select('*');

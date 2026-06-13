@@ -2,6 +2,7 @@
 // The Anthropic API key is read from the ANTHROPIC_API_KEY env var and never
 // exposed to the browser. The client sends the already-built `messageContent`
 // (PDF document block, or text for Excel/Word) and this forwards it to Claude.
+const { requireAuth } = require('./_auth');
 const MODEL = 'claude-opus-4-8';
 const MAX_TOKENS = 16000;
 const REQUEST_TIMEOUT_MS = 50000;        // per-attempt cap, kept under the 60s function limit
@@ -39,9 +40,11 @@ async function callAnthropic(apiKey, messageContent) {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  // Gate before spending any Anthropic credits — no valid session, no call.
+  if (!(await requireAuth(req, res))) return;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'Server is missing ANTHROPIC_API_KEY' });

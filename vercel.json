@@ -3,6 +3,8 @@
     "api/extract.js": { "maxDuration": 60 }
   },
   "routes": [
+    { "src": "/api/login", "dest": "/api/login.js" },
+    { "src": "/api/refresh", "dest": "/api/refresh.js" },
     { "src": "/api/spas", "dest": "/api/spas.js" },
     { "src": "/api/extract", "dest": "/api/extract.js" },
     { "src": "/api/margins", "dest": "/api/margins.js" },

@@ -184,12 +184,59 @@ const EXPIRING_DAYS = 14;
 const EU_COLORS = ["#4f8ef7","#a78bfa","#f472b6","#2dd4bf","#fb923c","#a3e635","#facc15","#38bdf8"];
 
 // ═══════════════════════════════════════════
-//  DATA LAYER  (swap apiGet/Post/Put/Del for Option 3)
+//  AUTH  (session + authenticated fetch)
 // ═══════════════════════════════════════════
-async function apiGet(p)      { const r=await fetch(p); if(!r.ok)throw new Error(await r.text()); return r.json(); }
-async function apiPost(p,b)   { const r=await fetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); if(!r.ok)throw new Error(await r.text()); return r.json(); }
-async function apiPut(p,b)    { const r=await fetch(p,{method:"PUT", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); if(!r.ok)throw new Error(await r.text()); return r.json(); }
-async function apiDel(p)      { const r=await fetch(p,{method:"DELETE"}); if(!r.ok)throw new Error(await r.text()); return r.json(); }
+const SESSION_KEY = "spatrack_session";
+function loadSession(){ try{return JSON.parse(localStorage.getItem(SESSION_KEY)||"null");}catch(e){return null;} }
+function saveSession(s){ try{localStorage.setItem(SESSION_KEY,JSON.stringify(s));}catch(e){} }
+function clearSession(){ try{localStorage.removeItem(SESSION_KEY);}catch(e){} }
+
+// Exchange the stored refresh token for a fresh session. Returns true on success.
+async function tryRefresh(){
+  const sess=loadSession();
+  if(!sess||!sess.refresh_token) return false;
+  try{
+    const r=await fetch("/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({refresh_token:sess.refresh_token})});
+    if(!r.ok) return false;
+    saveSession(await r.json()); return true;
+  }catch(e){ return false; }
+}
+
+// Drop to the login screen when the session can't be recovered.
+function expireToLogin(){ clearSession(); S.authed=false; S.loginErr="Your session expired — please sign in again."; render(); }
+
+// Authenticated fetch: attaches the Bearer token; on 401, refreshes once and
+// retries, otherwise drops to the login screen and throws.
+async function authFetch(path, opts={}){
+  const send=()=>{ const sess=loadSession(); const headers=Object.assign({}, opts.headers||{}, (sess&&sess.access_token)?{Authorization:"Bearer "+sess.access_token}:{}); return fetch(path, Object.assign({}, opts, {headers})); };
+  let r=await send();
+  if(r.status===401){
+    if(await tryRefresh()){ r=await send(); }
+    if(r.status===401){ expireToLogin(); throw new Error("Session expired"); }
+  }
+  return r;
+}
+
+async function doLogin(email,password){
+  S.loginErr="";S.loginBusy=true;render();
+  try{
+    const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password})});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||"Login failed");}
+    saveSession(await r.json());
+    S.authed=true;S.loginBusy=false;S.loginErr="";S.loading=true;render();
+    await boot();
+  }catch(e){ S.loginBusy=false;S.authed=false;S.loginErr=e.message||"Login failed";render(); }
+}
+
+function logout(){ clearSession();S.authed=false;S.loginErr="";S.spas=[];S.margins={};render(); }
+
+// ═══════════════════════════════════════════
+//  DATA LAYER
+// ═══════════════════════════════════════════
+async function apiGet(p)      { const r=await authFetch(p); if(!r.ok)throw new Error(await r.text()); return r.json(); }
+async function apiPost(p,b)   { const r=await authFetch(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); if(!r.ok)throw new Error(await r.text()); return r.json(); }
+async function apiPut(p,b)    { const r=await authFetch(p,{method:"PUT", headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); if(!r.ok)throw new Error(await r.text()); return r.json(); }
+async function apiDel(p)      { const r=await authFetch(p,{method:"DELETE"}); if(!r.ok)throw new Error(await r.text()); return r.json(); }
 
 async function loadAll() {
   const [raw, margins] = await Promise.all([apiGet("/api/spas"), apiGet("/api/margins")]);
@@ -253,6 +300,7 @@ const ST = {
 //  STATE
 // ═══════════════════════════════════════════
 let S = {
+  authed: !!loadSession(), loginErr:"", loginBusy:false, _loginEmail:"",
   spas:[], margins:{}, loading:true, loadErr:"",
   view:"dashboard", activeEU:"all", selSPA:null,
   filterSt:"all", sortBy:"expiration",
@@ -352,7 +400,7 @@ async function doUpdateMargin(eu,m) {
 async function loadHistory() {
   if(S.historyLoaded) return;
   try {
-    const resp=await fetch("/api/history");
+    const resp=await authFetch("/api/history");
     if(!resp.ok){ S.history=[]; S.historyLoaded=true; return; }
     const data=await resp.json();
     const twoYearsAgo=new Date();
@@ -365,7 +413,7 @@ async function loadHistory() {
 
 async function saveHistory(delta) {
   try {
-    const resp=await fetch("/api/history",{
+    const resp=await authFetch("/api/history",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -748,7 +796,7 @@ GENERAL PRICING RULES (apply when no vendor-specific instructions override):
     for(let attempt=0;attempt<2;attempt++){
       let netErr=false;
       try{
-        resp=await fetch("/api/extract",{
+        resp=await authFetch("/api/extract",{
           method:"POST",
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify({messageContent})
@@ -1689,9 +1737,34 @@ function renderHistory(){
 // ═══════════════════════════════════════════
 //  MAIN RENDER
 // ═══════════════════════════════════════════
+function loginScreen(){
+  const wrap=h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"20px"}});
+  const card=h("div",{class:"fadein",style:{width:"100%",maxWidth:"340px",background:"#0c1420",border:"1px solid #1e2d42",borderRadius:"12px",padding:"30px 26px"}});
+  card.appendChild(h("div",{class:"logo",style:{fontSize:"22px",marginBottom:"4px"}},"SPA",h("span",{},"track")));
+  card.appendChild(tx("Sign in to continue",{display:"block",fontSize:"12px",color:"#4a5568",marginBottom:"22px"}));
+  let email=S._loginEmail||"", pass="";
+  card.appendChild(lbl("Email"));
+  const ei=mkInp({type:"email",placeholder:"you@example.com",style:{marginBottom:"12px"}},email,v=>{email=v;S._loginEmail=v;});
+  card.appendChild(ei);
+  card.appendChild(lbl("Password"));
+  const pi=mkInp({type:"password",placeholder:"••••••••",style:{marginBottom:"16px"}},"",v=>pass=v);
+  card.appendChild(pi);
+  const submit=()=>{ if(!email.trim()||!pass){S.loginErr="Enter your email and password.";render();return;} doLogin(email.trim(),pass); };
+  ei.addEventListener("keydown",e=>{if(e.key==="Enter")submit();});
+  pi.addEventListener("keydown",e=>{if(e.key==="Enter")submit();});
+  if(S.loginErr) card.appendChild(h("div",{style:{color:"#f87171",fontSize:"11px",marginBottom:"12px",padding:"8px 11px",background:"#1a0505",borderRadius:"5px",border:"1px solid #5c1a1a"}},S.loginErr));
+  const b=btn(S.loginBusy?"Signing in…":"Sign in","btn-primary",submit,S.loginBusy);
+  b.style.width="100%";
+  card.appendChild(b);
+  wrap.appendChild(card);
+  setTimeout(()=>{(S._loginEmail?pi:ei).focus();},30);
+  return wrap;
+}
+
 function render(){
   const app=document.getElementById("app");
   app.innerHTML="";
+  if(!S.authed){ app.appendChild(loginScreen()); return; }
   const allEUs=buildEUs(S.spas,S.margins);
   const alerts=S.spas.filter(s=>s.status==="expiring"||s.status==="expired");
   const searchActive=!!S.searchQ.trim();
@@ -1722,6 +1795,7 @@ function render(){
   if(alerts.length>0) nr.appendChild(h("div",{class:"alert-pill"},"⚠ "+alerts.length+" ALERT"+(alerts.length>1?"S":"")));
   nr.appendChild(btn("✦ Import File","btn btn-ai",()=>{S.imp={step:"upload",file:null,b64:null,name:"",fileType:"",busy:false,err:"",review:null};set({showImport:true});}));
   nr.appendChild(btn("+ Add SPA","btn btn-primary",()=>set({showAdd:true,newSPA:blankSPA()})));
+  nr.appendChild(btn("Sign out","btn-ghost",()=>logout()));
   nav.appendChild(nr);
   app.appendChild(nav);
 
@@ -1971,7 +2045,14 @@ async function boot(){
   catch(e){S.loading=false;S.loadErr=e.message;}
   render();
 }
-boot();
+
+// Startup: show the login screen unless a stored session exists; if it does,
+// load data (authFetch will refresh or drop to login if the token is stale).
+function startup(){
+  if(loadSession()){ S.authed=true;S.loading=true;render();boot(); }
+  else { S.authed=false;S.loading=false;render(); }
+}
+startup();
 </script>
 </body>
 </html>

@@ -19,11 +19,14 @@ Deployed at https://spatrack.app (Vercel).
 ## Layout
 
 ```
-index.html        Entire frontend: styles, state, data layer, AI extraction, all views
-api/spas.js       CRUD for SPAs (GET/POST/PUT/DELETE)
-api/margins.js    CRUD for per-account margins (GET/POST upsert/DELETE)
-api/history.js    SPA renewal price-change history (GET last 2 years / POST)
-api/extract.js    Server-side proxy to the Claude API for document extraction
+index.html        Entire frontend: styles, state, auth, data layer, AI extraction, all views
+api/_auth.js      Shared requireAuth() guard (verifies the Bearer session); not a route
+api/login.js      Server-side login proxy → returns Supabase session tokens
+api/refresh.js    Exchanges a refresh token for a fresh session
+api/spas.js       CRUD for SPAs (GET/POST/PUT/DELETE) — auth-gated
+api/margins.js    CRUD for per-account margins (GET/POST upsert/DELETE) — auth-gated
+api/history.js    SPA renewal price-change history (GET last 2 years / POST) — auth-gated
+api/extract.js    Server-side proxy to the Claude API for document extraction — auth-gated
 vercel.json       Routes /api/* to handlers; everything else → index.html (SPA fallback)
 package.json      Single dep: @supabase/supabase-js
 ```
@@ -33,23 +36,34 @@ package.json      Single dep: @supabase/supabase-js
 ### Data flow
 ```
 Browser (index.html)
-  ├─ CRUD ─────> /api/spas, /api/margins, /api/history ──> Supabase Postgres
-  ├─ AI extract > /api/extract ──> api.anthropic.com (server's key)
+  ├─ Login ────> /api/login ──> Supabase Auth (server's anon key) ──> tokens to client
+  ├─ CRUD ─────> /api/spas, /api/margins, /api/history ──> Supabase Postgres   [Bearer]
+  ├─ AI extract > /api/extract ──> api.anthropic.com (server's key)            [Bearer]
+  ├─ Refresh ──> /api/refresh ──> Supabase Auth (on 401)
   └─ Doc upload > Supabase Storage REST (direct, optional)  [bypasses backend]
 ```
 
-The DB handlers are pure pass-throughs to Supabase. Claude extraction now goes through `api/extract.js`, which injects the Anthropic key server-side — the browser builds the prompt/message content but never holds the key. Supabase Storage upload (optional) is still done client-side.
+The DB handlers are pure pass-throughs to Supabase. Claude extraction goes through `api/extract.js`, which injects the Anthropic key server-side — the browser builds the prompt/message content but never holds the key. **Every `/api/*` route except `login`/`refresh` is gated by `requireAuth()`** and rejects requests without a valid Bearer session.
+
+### Authentication (single-user, server-side login proxy)
+- All Supabase keys stay server-side. The browser **never** holds a Supabase key — it only holds the session tokens returned by `/api/login`.
+- `api/login.js` calls `supabase.auth.signInWithPassword` with the anon key and returns `{access_token, refresh_token, expires_at}`. The client stores these in `localStorage` under `spatrack_session`.
+- `api/_auth.js` exports `requireAuth(req,res)` — reads `Authorization: Bearer <token>`, validates via `supabase.auth.getUser(token)`, sends 401 on failure. Every protected handler calls `if (!(await requireAuth(req,res))) return;` right after the OPTIONS short-circuit (so CORS preflight still works; `Allow-Headers` includes `Authorization`).
+- Client side: `authFetch()` attaches the Bearer token and, on a 401, calls `/api/refresh` once and retries; if that fails it clears the session and drops to the login screen (`expireToLogin`). All `apiGet/Post/Put/Del` and the direct `/api/history` + `/api/extract` calls go through `authFetch`.
+- No RLS and no service-role key are used — the anon key being server-only is what protects direct DB access (unchanged from before auth). **Do not expose the anon key to the client**, or that protection is lost.
+- Manual Supabase setup: create the single user (Auth → Users → Add user, Auto Confirm) and disable public sign-ups.
 
 ### Frontend internals (`index.html`)
 Organized into commented sections:
-- **CONFIG** — `EXPIRING_DAYS=14` (alert threshold), `EU_COLORS`, localStorage key for the API key.
-- **DATA LAYER** — `apiGet/apiPost/apiPut/apiDel` thin `fetch` wrappers; `loadAll()` fetches spas+margins and maps snake_case DB columns ↔ camelCase client fields.
-- **State** — one global `let S = {...}`. Mutate via `set(patch)` which merges and re-renders. Modals are booleans on `S` (`showAdd`, `showImport`, `showApiKey`, etc.).
+- **CONFIG** — `EXPIRING_DAYS=14` (alert threshold), `EU_COLORS`.
+- **AUTH** — `loadSession/saveSession/clearSession` (localStorage `spatrack_session`), `authFetch` (Bearer + one-shot refresh), `doLogin`, `logout`, `tryRefresh`, `expireToLogin`.
+- **DATA LAYER** — `apiGet/apiPost/apiPut/apiDel` wrap `authFetch`; `loadAll()` fetches spas+margins and maps snake_case DB columns ↔ camelCase client fields.
+- **State** — one global `let S = {...}`. Mutate via `set(patch)` which merges and re-renders. `S.authed` gates the UI; modals are booleans on `S` (`showAdd`, `showImport`, etc.).
 - **Mutations** — `doAddSPA`, `doEditSPA`, `doDelete`, account (margin) CRUD, renewal handling.
 - **FILE IMPORT + AI EXTRACTION** — `getFileType`, `doExtract` (the core extraction routine), `uploadDocToSupabase`.
 - **COMPUTED** — `getSrc`, `getSearchResults`, `getSummary` derive views from `S`.
-- **Render functions** — `render()` (nav + account bar + search + dispatch), `renderDashboard`, `renderSPAs`, `renderHistory`, `renderSearch`, plus modal builders (`spaForm`, `importModal`, `apiKeyModal`, `spaFocusModal`).
-- **BOOT** — `boot()` calls `loadAll()` and kicks off the first render.
+- **Render functions** — `render()` returns early to `loginScreen()` when `!S.authed`; otherwise builds nav (incl. Sign out) + account bar + search + dispatch to `renderDashboard`, `renderSPAs`, `renderHistory`, `renderSearch`, plus modal builders (`spaForm`, `importModal`, `spaFocusModal`).
+- **BOOT** — `startup()` shows the login screen unless a stored session exists, in which case it calls `boot()` → `loadAll()`.
 
 ### Views (top nav)
 - **Overview** (`dashboard`) — summary cards + expiring/expired alerts.
@@ -86,7 +100,7 @@ Inferred from the API handlers — there are no migration files in the repo.
 **Serverless (Vercel project env vars):**
 - `ANTHROPIC_API_KEY` — used by `api/extract.js` for the Claude call.
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
+- `SUPABASE_ANON_KEY` — also used by `login`/`refresh`/`_auth` for Supabase Auth. Auth added **no new env vars**.
 
 **Client-side:**
 - Supabase Storage upload (optional) reads `<meta name="supa-url">` / `<meta name="supa-key">` from the HTML; if absent, document upload is skipped silently.
